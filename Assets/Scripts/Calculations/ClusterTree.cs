@@ -50,10 +50,10 @@ public class ClusterTree : MonoBehaviour
             // Find next cluster to unpack 
             double max_distance = double.MinValue;
             int max_dist_index = 0;
-            for (int node_index = 0; node_index < depth; node_index++)
+            for (int node_index = 0; node_index < result.Count; node_index++)
             {
                 // Skip if leaf node
-                if (result[node_index].children is null) { continue; }
+                if (result[node_index].children.Count == 0) { continue; }
 
                 if (result[node_index].length > max_distance)
                 {
@@ -63,7 +63,7 @@ public class ClusterTree : MonoBehaviour
             }
 
             // Distance has to be positive. Negative must be an error in calculation, 0 means there is only leaves left. 
-            if (max_distance <= 0)
+            if (max_distance < 0)
             {
                 throw new InvalidOperationException("There must be an error with the tree calculation, " +
                     "as further unpacking of the tree is not possible. Distance is: " + max_distance.ToString());
@@ -89,6 +89,7 @@ public class ClusterTree : MonoBehaviour
             active_clusters.Add(new Node(dict, null, new List<Node>(0), new List<int> { index }, 0.0, false));
         }
 
+
         double[,] distance_matrix = InitDistanceMatrix(active_clusters);
 
         // Do until there is only one (root) cluster left
@@ -111,6 +112,7 @@ public class ClusterTree : MonoBehaviour
             active_clusters.Add(new Node(dict, null, new List<Node>(0), new List<int> { index }, 0.0, true));
         }
 
+        Debug.Log("Initial Leaves Count: " + active_clusters.Count);
         double[,] distance_matrix = InitDistanceMatrix(active_clusters);
 
         int test = 0;
@@ -120,6 +122,22 @@ public class ClusterTree : MonoBehaviour
             Debug.Log("Going along the tree in step  " + test.ToString());
             (int index1, int index2, double distance) = FindClosestDistance(distance_matrix, active_clusters.Count);
             Debug.Log("Index " + index1.ToString() + " and Index " + index2.ToString() + " are closest with the distance: " + distance.ToString());
+            if (distance == 0.0)
+            {
+                String str = "Average array of first array: ";
+                foreach (double element in active_clusters[index1].average_array)
+                {
+                    str += (element.ToString() + " ");
+                }
+                Debug.Log(str);
+
+                str = "Average array of second array: ";
+                foreach (double element2 in active_clusters[index2].average_array)
+                {
+                    str += (element2.ToString() + " ");
+                }
+                Debug.Log(str);
+            }
             UpdateDistanceMatrix(index1, index2, distance, ref active_clusters, ref distance_matrix);
             test++;
         }
@@ -289,17 +307,44 @@ public class Node
             .Where(id => dict.ContainsKey(id))
             .Select(id => dict[id].ArrayDouble)
             .ToArray();
-            
-            average_array = AverageArrays(arraysToAverage);
+
+            // If leaf node, no averaging is required
+            if (_neuron_ids.Count == 1)
+            {
+                average_array = arraysToAverage[0];
+            }
+            /*
+            foreach (double[] debora in arraysToAverage)
+            {
+                String str = "new row: ";
+                foreach (double element in debora)
+                {
+                    str += (element.ToString() + " ");
+                }
+                Debug.Log(str);
+            }
+            Debug.Log("Done wit it");
+            */
+            else
+            {
+                average_array = AverageArrays(arraysToAverage);
+            }
         }
         else
         {
-            double [] arrayToAverage = neuron_ids.ToArray()
+            double[] arrayToAverage = neuron_ids.ToArray()
             .Where(id => dict.ContainsKey(id))
             .Select(id => dict[id].SingleDouble)
             .ToArray();
 
-            average_single = arrayToAverage.Average();
+            if (_neuron_ids.Count == 1)
+            {
+                average_single = arrayToAverage[0];
+            }
+            else
+            {
+                average_single = arrayToAverage.Average();
+            }
         }
 
         static double[] AverageArrays(params double[][] arrays)
