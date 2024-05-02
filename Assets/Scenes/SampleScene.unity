@@ -796,8 +796,9 @@ GameObject:
   - component: {fileID: 101608320}
   - component: {fileID: 101608319}
   - component: {fileID: 101608321}
+  - component: {fileID: 101608322}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: Managers
   m_TagString: MainScripts
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -815,7 +816,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e2c27c1005b9a4a2ea293012aa3306dc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  new_task: 6
+  new_task: 14
   debug_trigger_task: 0
   input_train_or_test: train
   input_index: 0
@@ -853,6 +854,21 @@ MonoBehaviour:
   particle_starting_pos: {x: 8, y: 1, z: 3}
   sphere_starting_pos: {x: 15, y: 1, z: 3}
   umap_rasterization: 0
+  experiment_running: 0
+  hidden_layer_cluster: 100
+--- !u!114 &101608322
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 101608318}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a011dffb02400424b896cfec22e9864a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  start_experiment_trigger: 0
 --- !u!1 &128513415
 GameObject:
   m_ObjectHideFlags: 0

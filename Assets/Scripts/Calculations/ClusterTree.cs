@@ -8,7 +8,7 @@ public class ClusterTree : MonoBehaviour
 {
     Dictionary<int, ValueContainer> dict = new Dictionary<int, ValueContainer>();
     public Node root = null;
-    private int max_size;
+    public int max_size;
 
     public ClusterTree(double[] attribute)
     {
@@ -112,16 +112,16 @@ public class ClusterTree : MonoBehaviour
             active_clusters.Add(new Node(dict, null, new List<Node>(0), new List<int> { index }, 0.0, true));
         }
 
-        Debug.Log("Initial Leaves Count: " + active_clusters.Count);
+        //Debug.Log("Initial Leaves Count: " + active_clusters.Count);
         double[,] distance_matrix = InitDistanceMatrix(active_clusters);
 
         int test = 0;
         // Do until there is only one (root) cluster left
         while (active_clusters.Count > 1)
         {
-            Debug.Log("Going along the tree in step  " + test.ToString());
+            //Debug.Log("Going along the tree in step  " + test.ToString());
             (int index1, int index2, double distance) = FindClosestDistance(distance_matrix, active_clusters.Count);
-            Debug.Log("Index " + index1.ToString() + " and Index " + index2.ToString() + " are closest with the distance: " + distance.ToString());
+            //Debug.Log("Index " + index1.ToString() + " and Index " + index2.ToString() + " are closest with the distance: " + distance.ToString());
             if (distance == 0.0)
             {
                 String str = "Average array of first array: ";
@@ -129,19 +129,19 @@ public class ClusterTree : MonoBehaviour
                 {
                     str += (element.ToString() + " ");
                 }
-                Debug.Log(str);
+                //Debug.Log(str);
 
                 str = "Average array of second array: ";
                 foreach (double element2 in active_clusters[index2].average_array)
                 {
                     str += (element2.ToString() + " ");
                 }
-                Debug.Log(str);
+                //Debug.Log(str);
             }
             UpdateDistanceMatrix(index1, index2, distance, ref active_clusters, ref distance_matrix);
             test++;
         }
-        Debug.Log(active_clusters[0].children.Count);
+        //Debug.Log(active_clusters[0].children.Count);
 
         root = active_clusters[0];
 
@@ -207,8 +207,8 @@ public class ClusterTree : MonoBehaviour
         // Add new merged cluster to list and remove it's old individual clusters from list
         List<int> merged_neuron_ids = active_clusters[index1].neuron_ids.Concat(active_clusters[index2].neuron_ids).ToList();
         Node new_cluster = new(dict, null, new List<Node> { active_clusters[index1], active_clusters[index2] }, merged_neuron_ids, distance / 2.0, active_clusters[index1].is_array);
-        Debug.Log(active_clusters[index1]);
-        Debug.Log(active_clusters[index2]);
+        //Debug.Log(active_clusters[index1]);
+        //Debug.Log(active_clusters[index2]);
         active_clusters[index1].parent = new_cluster;
         active_clusters[index2].parent = new_cluster;
 

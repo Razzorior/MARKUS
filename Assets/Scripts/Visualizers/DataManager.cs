@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 public class DataManager : MonoBehaviour
 {
@@ -12,6 +13,10 @@ public class DataManager : MonoBehaviour
     public Vector3 particle_starting_pos = new Vector3(8f, 1f, 3f);
     public Vector3 sphere_starting_pos = new Vector3(15f, 1f, 3f);
     public bool umap_rasterization = false;
+
+    // Experimental stuff
+    public bool experiment_running = false;
+    public Action<List<float[][]>> experiment_function;
 
     // TODO: Write dynamic script. So far this is hard coded for the simple MLP
     [Range(1, 100)]
@@ -266,6 +271,13 @@ public class DataManager : MonoBehaviour
 
     public void InitUmapLayout(List<float[][]> data_array, bool is_signals = false)
     {
+        if (experiment_running == true)
+        {
+            experiment_function(data_array);
+            return;
+        }
+
+
         UmapReduction umap = new UmapReduction();
         // Amount of layers, excluding the output layer.
         int amount_of_layers = data_array.Count;
