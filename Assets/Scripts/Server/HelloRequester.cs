@@ -12,6 +12,7 @@ public class HelloRequester : RunAbleThread
 
     public enum task
     {
+        handshake,
         load_simple_mlp,
         load_input,
         load_and_send_input_and_activations,
@@ -47,6 +48,9 @@ public class HelloRequester : RunAbleThread
             client.Connect("tcp://localhost:5555");
             switch (task_to_do)
             {
+                case task.handshake:
+                    Handshake(client);
+                    break;
                 case task.load_simple_mlp:
                     LoadSimpleMLP(client);
                     break;
@@ -120,6 +124,22 @@ public class HelloRequester : RunAbleThread
 
             if (gotMessage) Debug.Log("Received " + message);
         }
+    }
+
+    private void Handshake(RequestSocket client)
+    {
+        Debug.Log("Initiating Handshake");
+        client.SendFrame("handshake");
+        string message = null;
+        bool gotMessage = false;
+        while (Running)
+        {
+            gotMessage = client.TryReceiveFrameString(out message);
+            if (gotMessage) break;
+        }
+
+        List<string> response = new List<string> { message };
+        messages = response;
     }
 
     private void LoadSimpleMLP(RequestSocket client)

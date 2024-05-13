@@ -373,7 +373,7 @@ public class DataManager : MonoBehaviour
             }
         }
 
-        //TODO: Init Clustering for any hidden laye 
+        //TODO: Init Clustering for any hidden layer 
         ClusterTree ct = new ClusterTree(ConvertFloatArrayToDoubleArray(data_array[1]));
         //ClusterTree ct = new ClusterTree(ConvertFloatArrayToDoubleArray(umap.CombineArrays(average_signals[0], average_signals[1])));
 

@@ -18,7 +18,7 @@ public class HelloClient : MonoBehaviour
     private DataManager usedDataManager = null;
     
     private void Start()
-    {
+    { 
         // Keep this, so that it only has to be loaded once
         usedDataManager = this.gameObject.GetComponent<DataManager>();
 
@@ -282,7 +282,7 @@ public class HelloClient : MonoBehaviour
     private void DealWithAverageActivations()
     {
         if (_helloRequester.messages is null)
-        {
+        { 
             Debug.LogError("ERROR: The Server didn't respond to send the Weights.");
             return;
         }
