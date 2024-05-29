@@ -13,6 +13,7 @@ public class HelloRequester : RunAbleThread
     public enum task
     {
         handshake,
+        load_model,
         load_simple_mlp,
         load_input,
         load_and_send_input_and_activations,
@@ -56,6 +57,9 @@ public class HelloRequester : RunAbleThread
                     break;
                 case task.load_input:
                     LoadInput(client);
+                    break;
+                case task.load_model:
+                    LoadModel(client);
                     break;
                 case task.load_and_send_input_and_activations:
                     LoadAndSendInputAndActivations(client);
@@ -198,6 +202,35 @@ public class HelloRequester : RunAbleThread
 
         Debug.Log("Recieved message: " + affirmation);
 
+    }
+
+    private void LoadModel(RequestSocket client)
+    {
+        client.SendFrame("load_model");
+        bool success = false;
+        string affirmation = "";
+
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out affirmation);
+            if (success) break;
+        }
+
+        Debug.Log("Recieved message: " + affirmation);
+
+        // Now sending the name of the model
+        success = false;
+        affirmation = "";
+        client.SendFrame(string_param_1);
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out affirmation);
+            if (success) break;
+        }
+
+        messages = new List<string> { affirmation };
+
+        Debug.Log("Recieved message: " + affirmation);
     }
 
     private void LoadAndSendInputAndActivations(RequestSocket client)
@@ -412,7 +445,7 @@ public class HelloRequester : RunAbleThread
 
         while (Running)
         {
-            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(10), ref message);
 
             if (success) break;
         }

@@ -2,6 +2,8 @@ using UnityEngine;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System;
+using System.Text.RegularExpressions;
+using Unity.VisualScripting;
 
 public class HelloClient : MonoBehaviour
 {
@@ -11,19 +13,22 @@ public class HelloClient : MonoBehaviour
     public bool debug_trigger_task = false;
     public string input_train_or_test = "train";
     public int input_index = 0;
+    public List<String> models_available;
+    // Just for Debugging purposes, later just display the Elements of the List directly
+    public int model_index = 0;
 
     [HideInInspector]
     public bool task_running = false;
 
     private DataManager usedDataManager = null;
-    
+
     private void Start()
-    { 
+    {
         // Keep this, so that it only has to be loaded once
         usedDataManager = this.gameObject.GetComponent<DataManager>();
 
         _helloRequester = new HelloRequester();
-        _helloRequester.task_to_do = HelloRequester.task.test_tensor;
+        _helloRequester.task_to_do = HelloRequester.task.handshake;
         _helloRequester.Start();
         task_running = true;
     }
@@ -79,7 +84,7 @@ public class HelloClient : MonoBehaviour
     public bool MakeANewRequest(HelloRequester.task new_task_to_do)
     {
         // If there is already a task that the python server is working on, don't except the new task!
-        if(task_running) return false;
+        if (task_running) return false;
 
         _helloRequester = new HelloRequester();
         _helloRequester.task_to_do = new_task_to_do;
@@ -110,6 +115,10 @@ public class HelloClient : MonoBehaviour
             case HelloRequester.task.send_subset_activations:
                 _helloRequester.int_param_1 = 1;
                 break;
+            case HelloRequester.task.load_model:
+                // TODO: Add Check if the model_index is out of bounds
+                _helloRequester.string_param_1 = models_available[model_index];
+                break;
         }
     }
 
@@ -119,6 +128,9 @@ public class HelloClient : MonoBehaviour
         // Make sure that you have the logic for each task_to_do in this switch case!
         switch (_helloRequester.task_to_do)
         {
+            case HelloRequester.task.handshake:
+                DealWithHandshake();
+                break;
             case HelloRequester.task.load_simple_mlp:
                 if (_helloRequester.messages is null)
                 {
@@ -127,6 +139,16 @@ public class HelloClient : MonoBehaviour
                 else
                 {
                     Debug.Log("Simple MLP model loaded succesfully!");
+                }
+                break;
+            case HelloRequester.task.load_model:
+                if (_helloRequester.messages is null)
+                {
+                    Debug.LogError("ERROR: The " + models_available[model_index] + " model wasn't loaded.");
+                }
+                else
+                {
+                    Debug.Log(models_available[model_index] + " model loaded succesfully!");
                 }
                 break;
             case HelloRequester.task.load_and_send_input_and_activations:
@@ -161,6 +183,19 @@ public class HelloClient : MonoBehaviour
                 Debug.LogError(_helloRequester.task_to_do);
                 break;
         }
+    }
+
+    private void DealWithHandshake()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: No answer after attempted handshake recieved.");
+            return;
+        }
+
+        List<string> res = TurnJSONintoStringList(_helloRequester.messages[0]);
+
+        models_available = res;
     }
 
     private void DealWithInputLoadingAndActivationDisplay()
@@ -349,6 +384,31 @@ public class HelloClient : MonoBehaviour
                 "(" + coordinates[0].ToString() + "," + coordinates[1].ToString());
             tmp_count++;
         }*/
+    }
+
+    // TODO: Turn this Regex mess into actually using Newtonsoft.JSON.. Didn't work initially 
+    private List<string> TurnJSONintoStringList(string message)
+    {
+        Debug.Log("Message looks like:");
+        Debug.Log(message);
+        try
+        {
+            List<string> response = new List<string>();
+            MatchCollection matches = Regex.Matches(message, @"\\\""(.*?)\\\""");
+
+            // Extract the matched strings and add them to the options list
+            foreach (Match match in matches)
+            {
+                response.Add(match.Groups[1].Value);
+            }
+            
+            return response;
+        }
+        catch (JsonException)
+        {
+            Debug.LogError("Error deserializing JSON string.");
+            return null;
+        }
     }
 
     private float[,] TurnJSONintoFloatArray(string message)
