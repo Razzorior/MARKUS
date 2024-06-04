@@ -146,7 +146,6 @@ public class DataManager : MonoBehaviour
 
     }
 
-
     public void InitParticleManagerForInput(double[,] input, List<double[]> activations)
     {
         Debug.Log("InitParticleManagerForInput was called");
@@ -281,6 +280,7 @@ public class DataManager : MonoBehaviour
         UmapReduction umap = new UmapReduction();
         // Amount of layers, excluding the output layer.
         int amount_of_layers = data_array.Count;
+        Debug.Log("Amount of layers: " + amount_of_layers);
 
         // Init particles of InputLayer
         int input_layer_size = data_array[0].Length;
@@ -301,17 +301,20 @@ public class DataManager : MonoBehaviour
 
         // TODO: Rasterize hidden layers using UMAP reduction and init their particles
         int lim;
+        int hidden_index;
         if (is_signals)
         {
             lim = amount_of_layers;
+            hidden_index = 1;
         }
         else
         {
             lim = amount_of_layers - 1;
+            hidden_index = 1;
         }
-        for (int index = 1; index < lim; index++)
+        for (int index = hidden_index; index < lim; index++)
         {
-            // Combine Input and output signals of hidden layer and use umap reduction to 2D
+            // TODO: Combine Input and output signals of hidden layer and use umap reduction to 2D for Signals
             float[][] embeddings = umap.applyUMAP(data_array[index], 1.4f);
 
             if (umap_rasterization == true)
@@ -322,7 +325,7 @@ public class DataManager : MonoBehaviour
             {
                 Debug.Log("Creating hidden layer");
                 GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
-                    + new Vector3(3*index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+                    + new Vector3(3*(index + (1-hidden_index)), 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
                 _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
                 signals_particle_objects.Add(_tmp);
             }
@@ -339,6 +342,7 @@ public class DataManager : MonoBehaviour
         {
             output_layer_size = data_array[data_array.Count - 1].Length;
         }
+
         float[][] output_layer_coordinates = new float[output_layer_size][];
 
         for(int index = 0; index < output_layer_size; index++)
