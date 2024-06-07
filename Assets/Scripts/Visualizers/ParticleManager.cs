@@ -4,6 +4,7 @@ using UnityEngine;
 using MathNet.Numerics.Statistics;
 using System.Linq;
 using MathNet.Numerics.LinearAlgebra;
+using System;
 
 //Reload!
 public class ParticleManager : MonoBehaviour
@@ -42,10 +43,23 @@ public class ParticleManager : MonoBehaviour
         float t;
 
         // TODO: Maybe use ParticleSystems velocity instead, so that the particle list doesn't need to be edited?
-        foreach (ClusteringRequest request in clustering_Requests)
+        List<int> elementsToRemove = new List<int>();
+        for (int index = 0; index < clustering_Requests.Count; index++)
         {
-            t = (current_time - request.start_time) * clustering_speed;
-            particles[request.id].position = Vector3.Lerp(request.start_position, request.target_position, t);
+            t = (current_time - clustering_Requests[index].start_time) * clustering_speed;
+            particles[clustering_Requests[index].id].position = Vector3.Lerp(clustering_Requests[index].start_position, clustering_Requests[index].target_position, t);
+            // If t >= 1, the end position is reached, so the request can be removed
+            if (t >= 1)
+            {
+                elementsToRemove.Add(index);
+            }
+        }
+
+        // Clean up finished Requests
+        elementsToRemove.Sort((a, b) => b.CompareTo(a));
+        foreach (int index in elementsToRemove)
+        {
+            clustering_Requests.RemoveAt(index);
         }
 
         ps.SetParticles(particles);

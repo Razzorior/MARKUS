@@ -348,7 +348,7 @@ public class HelloClient : MonoBehaviour
             subset_activations.Add(TurnJSONIntoNestedDoubleArray(message));
         }
 
-        usedDataManager.InitUmapLayout(subset_activations, true);
+        usedDataManager.InitUmapLayout(subset_activations, false);
     }
 
     private void DealWithAverageSignals()

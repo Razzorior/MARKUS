@@ -23,8 +23,8 @@ public class DataManager : MonoBehaviour
     public int hidden_layer_cluster = 100;
     private int last_know_hidden_layer_cluster = 100;
     private bool clustering_and_umap_done = false;
-    private ClusterTree hidden_layer_ct;
-    private float[][] hidden_layer_embeddings;
+    private List<ClusterTree> hidden_layer_CTs = new List<ClusterTree>();
+    private List<float[][]> hidden_layer_embeddings = new List<float[][]>();
 
     private List<double[,]> naps = null;
     private List<GameObject> particle_objects = new List<GameObject>();
@@ -64,15 +64,18 @@ public class DataManager : MonoBehaviour
         }
 
         // if here, there is a new amount of clusters requested.
-
-        List<Node> clusters = hidden_layer_ct.GetClusters(hidden_layer_cluster);
-
-        // TODO: This is hardcoded for simple MLP. Needs to be generalized eventually
-        ParticleManager pm = signals_particle_objects[1].GetComponent<ParticleManager>();
-
-        foreach (Node cluster in clusters)
+        for (int index = 0; index < hidden_layer_CTs.Count; index++)
         {
-            pm.ClusterParticles(cluster.neuron_ids, hidden_layer_embeddings);
+            int amount_of_clusters = Mathf.RoundToInt(hidden_layer_CTs[index].max_size * (hidden_layer_cluster / 100f));
+            List<Node> clusters = hidden_layer_CTs[index].GetClusters(amount_of_clusters);
+
+            // TODO: This is hardcoded for simple MLP. Needs to be generalized eventually
+            ParticleManager pm = signals_particle_objects[index+1].GetComponent<ParticleManager>();
+
+            foreach (Node cluster in clusters)
+            {
+                pm.ClusterParticles(cluster.neuron_ids, hidden_layer_embeddings[index]);
+            }
         }
 
         // After all is done, set remembered layer
@@ -87,7 +90,12 @@ public class DataManager : MonoBehaviour
             return false;
         }
 
-        return signals_particle_objects[1].GetComponent<ParticleManager>().DataManagerUpdate();
+        bool res = false;
+        for (int index = 0; index < hidden_layer_CTs.Count; index++)
+        {
+            res = signals_particle_objects[index+1].GetComponent<ParticleManager>().DataManagerUpdate();
+        }
+        return res;
     }
 
     private void UpdateLines()
@@ -329,7 +337,8 @@ public class DataManager : MonoBehaviour
                 _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
                 signals_particle_objects.Add(_tmp);
             }
-            hidden_layer_embeddings = embeddings;
+            hidden_layer_embeddings.Add(embeddings);
+            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(data_array[index])));
         }
 
         // Init Output Layer Particles
@@ -397,8 +406,6 @@ public class DataManager : MonoBehaviour
             Debug.Log(str);
             cluster_index++;
         }*/
-
-        hidden_layer_ct = ct;
         clustering_and_umap_done = true;
 
         Debug.Log("Done with cluster computation");
