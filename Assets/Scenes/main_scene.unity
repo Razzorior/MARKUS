@@ -819,7 +819,7 @@ MonoBehaviour:
   new_task: 14
   debug_trigger_task: 0
   input_train_or_test: train
-  input_index: 0
+  input_index: 1
   models_available: []
   model_index: 0
   task_running: 0
@@ -858,6 +858,7 @@ MonoBehaviour:
   umap_rasterization: 0
   experiment_running: 0
   hidden_layer_cluster: 100
+  class_index: 0
 --- !u!114 &101608322
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -18108,7 +18109,7 @@ Light:
   m_BounceIntensity: 1
   m_ColorTemperature: 6570
   m_UseColorTemperature: 0
-  m_BoundingSphereOverride: {x: 1.02e-43, y: 1e-45, z: 8.311e-42, w: 4.1326e-40}
+  m_BoundingSphereOverride: {x: 1.02e-43, y: 3e-45, z: 7.989e-42, w: 0}
   m_UseBoundingSphereOverride: 0
   m_UseViewFrustumForShadowCasterCull: 1
   m_ShadowRadius: 0

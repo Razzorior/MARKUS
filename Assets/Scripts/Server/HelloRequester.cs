@@ -5,6 +5,7 @@ using UnityEngine;
 using Newtonsoft.Json;
 using System.Collections.Generic;
 using System;
+using UnityEngine.Networking.PlayerConnection;
 
 // TODO: Write multiple classes for each task I guess.. Maybe come up with a better solution
 public class HelloRequester : RunAbleThread
@@ -27,8 +28,11 @@ public class HelloRequester : RunAbleThread
         send_weighted_activations,
         display_weights,
         send_average_activations,
+        send_class_average_activations,
         send_subset_activations,
         send_average_signals,
+        send_class_average_signals,
+        send_class_analysis_data,
         nothing
     }
 
@@ -85,11 +89,20 @@ public class HelloRequester : RunAbleThread
                 case task.send_average_activations:
                     SendAverageActivaions(client);
                     break;
+                case task.send_class_average_activations:
+                    SendClassAverageActivations(client);
+                    break;
                 case task.send_subset_activations:
                     SendSubsetActivations(client);
                     break;
                 case task.send_average_signals:
                     SendAverageSignals(client);
+                    break;
+                case task.send_class_average_signals:
+                    SendClassAverageSignals(client);
+                    break;
+                case task.send_class_analysis_data:
+                    SendClassAnalysisData(client);
                     break;
             }
         }
@@ -247,6 +260,14 @@ public class HelloRequester : RunAbleThread
         messages = new List<string>();
         SendInput(client, false);
         SendIntegratedGradients(client, false);
+    }
+
+    private void SendClassAnalysisData(RequestSocket client)
+    {
+        messages = new List<string>();
+        SendClassAverageActivations(client, false);
+        SendSubsetActivations(client, false);
+        SendClassAverageSignals(client, false);
     }
 
     private void TestTensor(RequestSocket client)
@@ -411,6 +432,30 @@ public class HelloRequester : RunAbleThread
         messages = message;
     }
 
+    private void SendClassAverageActivations(RequestSocket client, bool create_list = true)
+    {
+        client.SendFrame("send_class_average_activations");
+        string response = null;
+        bool success = false;
+
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out response);
+
+            if (success) break;
+        }
+
+        if (create_list)
+        {
+            messages = new List<String> { response };
+        }
+        else
+        {
+            messages.Add(response);
+        }
+
+    }
+
     private void SendAverageSignals(RequestSocket client)
     {
         client.SendFrame("send_average_signals");
@@ -427,7 +472,30 @@ public class HelloRequester : RunAbleThread
         messages = message;
     }
 
-    private void SendSubsetActivations(RequestSocket client)
+    private void SendClassAverageSignals(RequestSocket client, bool create_list = true)
+    {
+        client.SendFrame("send_class_average_signals");
+        string response = null;
+        bool success = false;
+
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out response);
+
+            if (success) break;
+        }
+
+        if (create_list)
+        {
+            messages = new List<String> { response };
+        }
+        else
+        {
+            messages.Add(response);
+        }
+    }
+
+    private void SendSubsetActivations(RequestSocket client, bool create_list = true)
     {
         client.SendFrame("send_subset_activations");
         bool success = false;
@@ -443,14 +511,23 @@ public class HelloRequester : RunAbleThread
         List<String> message = new List<string>();
         client.SendFrame(int_param_1.ToString());
 
+        string response = null;
+        success = false;
+
         while (Running)
         {
-            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(10), ref message);
+            success = client.TryReceiveFrameString(out response);
 
             if (success) break;
         }
 
-        messages = message;
+        if (create_list)
+        {
+            messages = new List<String> { response };
+        }
+        else
+        {
+            messages.Add(response);
+        }
     }
-
  }

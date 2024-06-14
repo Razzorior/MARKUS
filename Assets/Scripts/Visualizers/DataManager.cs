@@ -14,11 +14,11 @@ public class DataManager : MonoBehaviour
     public Vector3 sphere_starting_pos = new Vector3(15f, 1f, 3f);
     public bool umap_rasterization = false;
 
-    // Experimental stuff
+    // Stuff for experiments
     public bool experiment_running = false;
     public Action<List<float[][]>> experiment_function;
 
-    // TODO: Write dynamic script. So far this is hard coded for the simple MLP
+    // TODO: Write dynamic script. So far this is hard coded for MNIST
     [Range(1, 100)]
     public int hidden_layer_cluster = 100;
     private int last_know_hidden_layer_cluster = 100;
@@ -33,6 +33,14 @@ public class DataManager : MonoBehaviour
     private List<GameObject> input_connectivity_objects = new List<GameObject>();
     private List<GameObject> connection_manager_objects = new List<GameObject>();
 
+    // Variables for full class analysis
+    [Range(0,9)]
+    public int class_index = 0;
+    private int last_know_class_index = 0;
+    private List<List<float[]>> class_average_activations;
+    private List<List<float[][]>> class_average_signals;
+    private bool class_analysis_running = false;
+
     // Start is called before the first frame update
     void Start()
     {
@@ -45,6 +53,7 @@ public class DataManager : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        UpdateClassSlider();
         UpdateClusterSlider();
         bool update_done = UpdateParticles();
         if (update_done == true) { UpdateLines(); }
@@ -83,6 +92,21 @@ public class DataManager : MonoBehaviour
         // END: Clustering slider
     }
 
+    private void UpdateClassSlider()
+    {
+        if (class_analysis_running == false)
+        {
+            return;
+        }
+
+        if(last_know_class_index == class_index) 
+        {
+            return;
+        }
+
+        UpdateClass(class_index);
+        last_know_class_index = class_index;
+    }
     private bool UpdateParticles()
     {
         if (signals_particle_objects.Count <= 0)
@@ -194,6 +218,30 @@ public class DataManager : MonoBehaviour
         for (int index = 1; index < input_particle_objects.Count; index++)
         {
             input_particle_objects[index].GetComponent<ParticleManager>().UpdateParticleSytemsWB(activations[index - 1]);
+        }
+    }
+
+    public void UpdateClass(int _class_index)
+    {
+        for (int index = 0; index < connection_manager_objects.Count; index ++) 
+        {
+            GameObject.Destroy(connection_manager_objects[index]);
+        }
+        connection_manager_objects = new List<GameObject>();
+
+        for (int index = 0; index < class_average_signals[_class_index].Count; index++)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[_class_index][index])
+                , 100, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform);
+
+            connection_manager_objects.Add(connectivity_go);
         }
     }
 
@@ -410,6 +458,87 @@ public class DataManager : MonoBehaviour
 
         Debug.Log("Done with cluster computation");
         
+    }
+
+    public void InitUmapLayoutWithFullData(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals)
+    {
+        UmapReduction umap = new UmapReduction();
+        int amount_of_layers = _activations.Count; // Helper: 4
+
+        // Init particles of InputLayer
+        int input_layer_size = _activations[0].Length;
+        float[][] input_layer_coordinates = new float[input_layer_size][];
+
+        int amount_per_row = Mathf.FloorToInt(Mathf.Sqrt(input_layer_size));
+        for (int index = 0; index < input_layer_size; index++)
+        {
+            float x = ((index % amount_per_row) - (amount_per_row / 2)) * 0.1f;
+            float y = (Mathf.Floor(index / amount_per_row) - (amount_per_row / 2)) * -0.1f;
+
+            input_layer_coordinates[index] = new float[] { x, y };
+        }
+
+        GameObject go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(input_layer_coordinates);
+        signals_particle_objects.Add(go);
+
+        for (int index = 1; index < _activations.Count - 1; index++)
+        {
+            float[][] embeddings = umap.applyUMAP(_subset_activations[index], 1.4f);
+
+            Debug.Log("Creating hidden layer");
+            GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+            _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
+            signals_particle_objects.Add(_tmp);
+            
+            hidden_layer_embeddings.Add(embeddings);
+            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(_subset_activations[index])));
+        }
+
+        // Init Output Layer Particles
+        int output_layer_size = _activations[_activations.Count - 1].Length;
+
+        float[][] output_layer_coordinates = new float[output_layer_size][];
+
+        for (int index = 0; index < output_layer_size; index++)
+        {
+            float x = ((index % output_layer_size) - (output_layer_size / 2)) * 0.1f;
+            float y = 0f;
+
+            output_layer_coordinates[index] = new float[] { x, y };
+        }
+
+        go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                    + new Vector3(3 * (_activations.Count - 1), 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(output_layer_coordinates);
+        signals_particle_objects.Add(go);
+
+        
+        for (int index = 0; index < _signals.Count; index++)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(_signals[index])
+                , 100, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform);
+
+            connection_manager_objects.Add(connectivity_go);
+        }
+        
+        clustering_and_umap_done = true;
+    }
+
+    public void InitFullAnalysisOfClass(List<List<float[]>> _class_average_activations, List<float[][]> _subset_activations, List<List<float[][]>> _class_average_signals )
+    {
+        class_average_activations = _class_average_activations;
+        class_average_signals = _class_average_signals;
+        class_analysis_running = true;
+        InitUmapLayoutWithFullData(class_average_activations[class_index], _subset_activations, class_average_signals[class_index]);
     }
 
     public void Show_Different_ClassNAPs(int class_index)

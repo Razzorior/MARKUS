@@ -12,7 +12,7 @@ public class HelloClient : MonoBehaviour
     public HelloRequester.task new_task = HelloRequester.task.nothing;
     public bool debug_trigger_task = false;
     public string input_train_or_test = "train";
-    public int input_index = 0;
+    public int input_index = 1;
     public List<String> models_available;
     // Just for Debugging purposes, later just display the Elements of the List directly
     public int model_index = 0;
@@ -108,6 +108,9 @@ public class HelloClient : MonoBehaviour
                 _helloRequester.string_param_1 = input_train_or_test;
                 _helloRequester.int_param_1 = input_index;
                 break;
+            case HelloRequester.task.send_class_analysis_data:
+                _helloRequester.int_param_1 = input_index;
+                break;
             case HelloRequester.task.load_and_send_input_and_ig:
                 _helloRequester.string_param_1 = input_train_or_test;
                 _helloRequester.int_param_1 = input_index;
@@ -166,17 +169,26 @@ public class HelloClient : MonoBehaviour
             case HelloRequester.task.send_average_activations:
                 DealWithAverageActivations();
                 break;
+            case HelloRequester.task.send_class_average_activations:
+                DealWithClassAverageActivations();
+                break;
             case HelloRequester.task.send_subset_activations:
                 DealWithSubsetActivations();
                 break;
             case HelloRequester.task.send_average_signals:
                 DealWithAverageSignals();
                 break;
+            case HelloRequester.task.send_class_average_signals:
+                DealWithClassAverageSignals();
+                break;
             case HelloRequester.task.display_weights:
                 DealWithWeightDisplay();
                 break;
             case HelloRequester.task.test_tensor:
                 Debug.Log("Done");
+                break;
+            case HelloRequester.task.send_class_analysis_data:
+                DealWithClassAnalysis();
                 break;
             default:
                 Debug.LogError("It seems like you are missing a task_to_do in the HelloClient.cs Function 'DealWithMessageAccordingToGiven Task()!");
@@ -258,9 +270,28 @@ public class HelloClient : MonoBehaviour
         usedDataManager.InitParticleManagerForNaps(nap_arrays, 0);
     }
 
+    private void DealWithClassAnalysis()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: No responses recieved from server");
+            return;
+        }
+        if (_helloRequester.messages.Count < 3)
+        {
+            Debug.LogError("ERROR: Expected 3 messages (class_average_activations, subset_activations, class_average_signals), but only recieved " + _helloRequester.messages.Count);
+            return;
+        }
+
+        List<List<float[]>> class_acts = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
+        List<float[][]> subset_acts = TurnJSONIntoListNestedArray(_helloRequester.messages[1]);
+        List<List<float[][]>> class_sigs = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[2]);
+
+        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs);
+    }
     private void DealWithWeightDisplay()
     {
-        if(_helloRequester.messages is null)
+        if (_helloRequester.messages is null)
         {
             Debug.LogError("ERROR: The Server didn't respond to send the Weights.");
             return;
@@ -272,9 +303,9 @@ public class HelloClient : MonoBehaviour
         }
         List<double[,]> weight_arrays = new List<double[,]>();
         List<double[]> biases = new List<double[]>();
-        for (int index = 0; index < _helloRequester.messages.Count/2; index++)
+        for (int index = 0; index < _helloRequester.messages.Count / 2; index++)
         {
-            double[,] converted_message_weight = TurnJSONintoDoubleArray(_helloRequester.messages[index*2]);
+            double[,] converted_message_weight = TurnJSONintoDoubleArray(_helloRequester.messages[index * 2]);
             double[] converted_message_bias = TurnJSONintoDoubleList(_helloRequester.messages[index * 2 + 1]);
             weight_arrays.Add(converted_message_weight);
             biases.Add(converted_message_bias);
@@ -317,7 +348,7 @@ public class HelloClient : MonoBehaviour
     private void DealWithAverageActivations()
     {
         if (_helloRequester.messages is null)
-        { 
+        {
             Debug.LogError("ERROR: The Server didn't respond to send the Weights.");
             return;
         }
@@ -330,7 +361,23 @@ public class HelloClient : MonoBehaviour
         }
 
         usedDataManager.InitClusteringManager(average_activations);
-        
+
+    }
+
+    private void DealWithClassAverageActivations()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: The Server didn't respond to send class average activations.");
+            return;
+        }
+
+
+        List<List<float[]>> class_average_signals = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
+
+        Debug.Log("Class Count " + class_average_signals.Count);
+        Debug.Log("Layer Count " + class_average_signals[0].Count);
+        Debug.Log("Random Value Check" + class_average_signals[0][3][0]);
     }
 
     private void DealWithSubsetActivations()
@@ -341,12 +388,7 @@ public class HelloClient : MonoBehaviour
             return;
         }
 
-        List<float[][]> subset_activations = new List<float[][]>();
-
-        foreach (String message in _helloRequester.messages)
-        {
-            subset_activations.Add(TurnJSONIntoNestedDoubleArray(message));
-        }
+        List<float[][]> subset_activations = TurnJSONIntoListNestedArray(_helloRequester.messages[0]);
 
         usedDataManager.InitUmapLayout(subset_activations, false);
     }
@@ -384,6 +426,26 @@ public class HelloClient : MonoBehaviour
                 "(" + coordinates[0].ToString() + "," + coordinates[1].ToString());
             tmp_count++;
         }*/
+    }
+
+    private void DealWithClassAverageSignals()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: The Server didn't respond to send class average signals.");
+            return;
+        }
+
+        Debug.Log("Recieved a message:");
+        Debug.Log("Message count: " + _helloRequester.messages.Count);
+
+        List<List<float[][]>> class_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[0]);
+
+
+        Debug.Log("I guesss it somehow worked, lol?");
+        Debug.Log("Class Count " + class_average_signals.Count);
+        Debug.Log("Layer Count " + class_average_signals[0].Count);
+        Debug.Log("Random Value Check" + class_average_signals[0][0][128][65]);
     }
 
     // TODO: Turn this Regex mess into actually using Newtonsoft.JSON.. Didn't work initially 
@@ -468,6 +530,57 @@ public class HelloClient : MonoBehaviour
             string trimmed_message = message.Trim('"');
             // Deserialize the JSON string into a float array
             float[][] nestedArray = JsonConvert.DeserializeObject<float[][]>(trimmed_message);
+            return nestedArray;
+        }
+        catch (JsonException)
+        {
+            Debug.LogError("Error deserializing JSON string.");
+            Debug.Log(message);
+            return null;
+        }
+    }
+
+    private List<List<float[][]>> TurnJSONIntoListListNestedFloatArray(string message)
+    {
+        try
+        {
+            string trimmed_message = message.Trim('"');
+            // Deserialize the JSON string into a float array
+            List < List<float[][]>> nestedArray = JsonConvert.DeserializeObject<List<List<float[][]>>>(trimmed_message);
+            return nestedArray;
+        }
+        catch (JsonException)
+        {
+            Debug.LogError("Error deserializing JSON string.");
+            Debug.Log(message);
+            return null;
+        }
+    }
+
+    private List<float[][]> TurnJSONIntoListNestedArray(string message)
+    {
+        try
+        {
+            string trimmed_message = message.Trim('"');
+            // Deserialize the JSON string into a float array
+            List<float[][]> nestedArray = JsonConvert.DeserializeObject<List<float[][]>>(trimmed_message);
+            return nestedArray;
+        }
+        catch (JsonException)
+        {
+            Debug.LogError("Error deserializing JSON string.");
+            Debug.Log(message);
+            return null;
+        }
+    }
+
+    private List<List<float[]>> TurnJSONIntoListListFloatArray(string message)
+    {
+        try
+        {
+            string trimmed_message = message.Trim('"');
+            // Deserialize the JSON string into a float array
+            List<List<float[]>> nestedArray = JsonConvert.DeserializeObject<List<List<float[]>>>(trimmed_message);
             return nestedArray;
         }
         catch (JsonException)
