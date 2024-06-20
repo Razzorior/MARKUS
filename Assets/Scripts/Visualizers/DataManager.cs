@@ -40,8 +40,21 @@ public class DataManager : MonoBehaviour
     private List<List<float[]>> class_average_activations;
     private List<List<float[][]>> class_average_signals;
     private bool class_analysis_running = false;
+    public bool class_normalized_lines = true;
+    private bool last_known_class_normalized_lines = true;
+    private List<(double, double)> scales_per_layer = new List<(double, double)>();
+
+    // Variables for Signal Lines
+    public bool show_max_lines = true;
+    private bool last_known_show_max_lines = true;
+    [Range(1,1000)]
+    public int max_lines = 100;
+    private int last_known_max_lines = 100;
+    public bool backwards_pass = false;
+    private bool last_known_backwards_pass = false;
 
     // Start is called before the first frame update
+    // TODO: add the last_known variables into here, so that they are loaded on start, in cases the original variables have been changed in inspector
     void Start()
     {
         if (particle_prefab is null)
@@ -55,6 +68,8 @@ public class DataManager : MonoBehaviour
     {
         UpdateClassSlider();
         UpdateClusterSlider();
+        UpdateMaxLinesSlider();
+        UpdateToggles();
         bool update_done = UpdateParticles();
         if (update_done == true) { UpdateLines(); }
     }
@@ -104,9 +119,90 @@ public class DataManager : MonoBehaviour
             return;
         }
 
-        UpdateClass(class_index);
+        if (!backwards_pass)
+            Rebuild_ClassAnalysis_Lines();
+        else
+            BuildBackwardPassLines();
+
         last_know_class_index = class_index;
     }
+
+    private void UpdateMaxLinesSlider()
+    {
+        if (class_analysis_running == false)
+        {
+            return;
+        }
+
+        if (last_known_max_lines == max_lines)
+        {
+            return;
+        }
+
+        Rebuild_ClassAnalysis_Lines();
+
+        last_known_max_lines = max_lines;
+    }
+
+    // Function with all the different boolean toggles for the visualization. Add all toggle functions here.
+    private void UpdateToggles()
+    {
+        UpdateClassNormalizedLines();
+        UpdateMaxMinLines();
+        ToggleBackwardsPass();
+    }
+
+    private void UpdateClassNormalizedLines()
+    {
+        // No change on button, return
+        if (class_normalized_lines == last_known_class_normalized_lines) return;
+        // No class analysis -> Not able to change either. Ignore the request, so return
+        if (class_analysis_running == false) return;
+
+        // Makes sure that scales_per_layer is only computed once and then stored. 
+        if (!class_normalized_lines && scales_per_layer.Count == 0)
+        {
+            scales_per_layer = FindMinMax(class_average_signals);
+        }
+
+        Rebuild_ClassAnalysis_Lines();
+
+        last_known_class_normalized_lines = class_normalized_lines;
+    }
+
+    private void UpdateMaxMinLines()
+    {
+        // No change of the bool, so nothing to do -> return
+        if (show_max_lines == last_known_show_max_lines) return;
+
+        // No class analysis -> Not implemented yet. TODO
+        if (class_analysis_running == false) return;
+
+        Rebuild_ClassAnalysis_Lines();
+
+        last_known_show_max_lines = show_max_lines;
+    }
+
+    private void ToggleBackwardsPass()
+    {
+        if (class_analysis_running == false) return;
+
+        if (backwards_pass == last_known_backwards_pass) return;
+
+        // Turn Backward pass view off.
+        if (!backwards_pass)
+        {
+            Rebuild_ClassAnalysis_Lines();
+        }
+        // Turn Backward pass view on.
+        else
+        {
+            BuildBackwardPassLines();
+        }
+
+        last_known_backwards_pass = backwards_pass;
+    }
+
     private bool UpdateParticles()
     {
         if (signals_particle_objects.Count <= 0)
@@ -190,14 +286,12 @@ public class DataManager : MonoBehaviour
             return;
         }
 
-        // TODO: Add Particles
         GameObject go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(6f, 0f, 0f), Quaternion.identity);
         int total_input_count = input.GetLength(0) * input.GetLength(1);
         go.GetComponent<ParticleManager>().InitParticleSystemsInput(input, total_input_count);
 
         input_particle_objects.Add(go);
 
-        // TODO: Add Activations
         for (int index = 0; index < activations.Count; index++)
         {
             go = Instantiate(particle_prefab, particle_starting_pos - new Vector3(-6f, 0f, (index + 1f) * 2f), Quaternion.identity);
@@ -205,7 +299,6 @@ public class DataManager : MonoBehaviour
             input_particle_objects.Add(go);
         }
 
-        // TODO: Add connections
         HelloClient used_client = this.gameObject.GetComponent<HelloClient>();
         used_client.new_task = HelloRequester.task.send_weighted_activations;
         used_client.debug_trigger_task = true;
@@ -218,30 +311,6 @@ public class DataManager : MonoBehaviour
         for (int index = 1; index < input_particle_objects.Count; index++)
         {
             input_particle_objects[index].GetComponent<ParticleManager>().UpdateParticleSytemsWB(activations[index - 1]);
-        }
-    }
-
-    public void UpdateClass(int _class_index)
-    {
-        for (int index = 0; index < connection_manager_objects.Count; index ++) 
-        {
-            GameObject.Destroy(connection_manager_objects[index]);
-        }
-        connection_manager_objects = new List<GameObject>();
-
-        for (int index = 0; index < class_average_signals[_class_index].Count; index++)
-        {
-            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
-
-            // Adding the particle systems auf the two layers to connect.
-            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
-            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
-            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
-
-            connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[_class_index][index])
-                , 100, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform);
-
-            connection_manager_objects.Add(connectivity_go);
         }
     }
 
@@ -331,7 +400,6 @@ public class DataManager : MonoBehaviour
             experiment_function(data_array);
             return;
         }
-
 
         UmapReduction umap = new UmapReduction();
         // Amount of layers, excluding the output layer.
@@ -486,7 +554,6 @@ public class DataManager : MonoBehaviour
         {
             float[][] embeddings = umap.applyUMAP(_subset_activations[index], 1.4f);
 
-            Debug.Log("Creating hidden layer");
             GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
                 + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
             _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
@@ -509,12 +576,15 @@ public class DataManager : MonoBehaviour
             output_layer_coordinates[index] = new float[] { x, y };
         }
 
+        // TODO: Don't use InitParticleSystemWB, build a new function with similar functionality but custom positioning of the particles,
+        // TODO: or change the way InitParticleSystemsWB takes those in.
         go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
                     + new Vector3(3 * (_activations.Count - 1), 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
-        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(output_layer_coordinates);
+        go.GetComponent<ParticleManager>().InitParticleSystemsWB(ConvertFloatArrToDoubleArr(_activations[3]));
         signals_particle_objects.Add(go);
 
-        
+
+        // Init Signal Lines
         for (int index = 0; index < _signals.Count; index++)
         {
             GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
@@ -549,6 +619,65 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    private void BuildBackwardPassLines()
+    {
+        List<int> ids = new List<int> { class_index };
+        DeleteExistingLines();
+        for (int index = class_average_signals[class_index].Count - 1; index >= 0; index--)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                , 10, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids);
+
+            connection_manager_objects.Add(connectivity_go);
+        }
+    }
+
+    private void Rebuild_ClassAnalysis_Lines()
+    {
+        DeleteExistingLines();
+
+        for (int index = 0; index < class_average_signals[class_index].Count; index++)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            if (class_normalized_lines)
+            {
+                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                    , max_lines, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, use_max_values: show_max_lines);
+
+            }
+            else
+            {
+                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                    , max_lines, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, scales_per_layer[index], use_max_values: show_max_lines);
+            }
+
+            connection_manager_objects.Add(connectivity_go);
+        }
+    }
+
+    private void DeleteExistingLines()
+    {
+        for (int index = 0; index < connection_manager_objects.Count; index++)
+        {
+            GameObject.Destroy(connection_manager_objects[index]);
+        }
+        connection_manager_objects = new List<GameObject>();
+    }
+
+
     private double[,] ConvertFloatArrayToDoubleArray(float[][] floatArray)
     {
         int numRows = floatArray.Length;
@@ -565,5 +694,53 @@ public class DataManager : MonoBehaviour
         }
 
         return doubleArray;
+    }
+
+    private double[] ConvertFloatArrToDoubleArr(float[] floatArray)
+    {
+        int arr_size = floatArray.Length;
+
+        double[] doubleArray = new double[arr_size];
+        for (int i = 0; i < arr_size; i++)
+        {
+            doubleArray[i] = (double)floatArray[i];
+        }
+
+        return doubleArray;
+    }
+
+    public List<(double min, double max)> FindMinMax(List<List<float[][]>> my_list)
+    {
+        // The amount of layers in the model
+        int layer_amount = my_list[0].Count;
+        // The amount of classes in the data
+        int class_amount = my_list.Count;
+
+        // List that will be returned
+        List<(double, double)> result = new List<(double, double)>();
+
+        // Iterate through the layer first, because we want min max for each layer through all classes
+        for (int layer_index = 0; layer_index < layer_amount; layer_index++)
+        {
+            // init min max with the opposite max min value;
+            float min = float.MaxValue;
+            float max = float.MinValue;
+
+            for (int class_index = 0; class_index < class_amount; class_index++)
+            {
+                foreach (var array in my_list[class_index][layer_index])
+                {
+                    foreach (var element in array)
+                    {
+                        min = Mathf.Min(min, element);
+                        max = Mathf.Max(max, element);
+                    }
+
+                }  
+            }
+            result.Add((min, max));
+        }
+
+        return result;
     }
 }

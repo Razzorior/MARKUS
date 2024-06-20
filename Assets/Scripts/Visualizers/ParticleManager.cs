@@ -90,7 +90,7 @@ public class ParticleManager : MonoBehaviour
         Shift_nap_particles(naps, class_index);
     }
 
-    public void InitParticleSystemsWB(double[] biases)
+    public void InitParticleSystemsWB(double[] biases, bool coordinates_given = false, float[][] coodinates = null)
     {
         ps.Play();
         int biases_count = biases.GetLength(0);
