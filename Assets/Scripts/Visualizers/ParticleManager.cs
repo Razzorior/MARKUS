@@ -67,6 +67,25 @@ public class ParticleManager : MonoBehaviour
         return true;
     }
 
+    public void HighlightGivenParticlesAndGreyRest(List<int> particle_ids_to_highlight)
+    {
+        int particle_count = ps.particleCount;
+        var particles = new ParticleSystem.Particle[particle_count];
+        ps.GetParticles(particles);
+
+        for (int index=0; index<particle_count; index++) 
+        {
+            particles[index].startColor = Color.gray;
+        }
+
+        foreach (int index in particle_ids_to_highlight)
+        {
+            particles[index].startColor = Color.red;
+        }
+
+        ps.SetParticles(particles);
+    }
+
     public void InitParticleSystems(int count)
     {
         ps.Play();

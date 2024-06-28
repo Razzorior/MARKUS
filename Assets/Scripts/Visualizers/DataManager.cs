@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using Unity.VisualScripting;
 
 public class DataManager : MonoBehaviour
 {
@@ -10,7 +11,7 @@ public class DataManager : MonoBehaviour
     public GameObject sphere_prefab;
 
     // Position from where the first layers particles are supposed to be spawned
-    public Vector3 particle_starting_pos = new Vector3(8f, 1f, 3f);
+    public Vector3 particle_starting_pos = new Vector3(8f, 2f, 3f);
     public Vector3 sphere_starting_pos = new Vector3(15f, 1f, 3f);
     public bool umap_rasterization = false;
 
@@ -139,7 +140,14 @@ public class DataManager : MonoBehaviour
             return;
         }
 
-        Rebuild_ClassAnalysis_Lines();
+        if (backwards_pass)
+        {
+            BuildBackwardPassLines();
+        }
+        else
+        {
+            Rebuild_ClassAnalysis_Lines();
+        }
 
         last_known_max_lines = max_lines;
     }
@@ -165,7 +173,14 @@ public class DataManager : MonoBehaviour
             scales_per_layer = FindMinMax(class_average_signals);
         }
 
-        Rebuild_ClassAnalysis_Lines();
+        if (backwards_pass)
+        {
+            BuildBackwardPassLines();
+        }
+        else
+        { 
+            Rebuild_ClassAnalysis_Lines(); 
+        }
 
         last_known_class_normalized_lines = class_normalized_lines;
     }
@@ -177,6 +192,8 @@ public class DataManager : MonoBehaviour
 
         // No class analysis -> Not implemented yet. TODO
         if (class_analysis_running == false) return;
+        // Min Lines doesn't make sence for backward pass, so ignore it. 
+        if (backwards_pass) return;
 
         Rebuild_ClassAnalysis_Lines();
 
@@ -193,6 +210,7 @@ public class DataManager : MonoBehaviour
         if (!backwards_pass)
         {
             Rebuild_ClassAnalysis_Lines();
+            ClearHighlightedParticles();
         }
         // Turn Backward pass view on.
         else
@@ -230,6 +248,13 @@ public class DataManager : MonoBehaviour
             go.GetComponent<ConnectionManager>().DataManagerUpdate();
         }
 
+    }
+
+    public void CleanUpForNewLoadedModel()
+    {
+        DeleteExistingLines();
+        DeleteExistingParticles();
+        ResetOtherParameters();
     }
 
     public void InitWeightedActivationLines(List<double[,]> weighted_activations)
@@ -580,7 +605,7 @@ public class DataManager : MonoBehaviour
         // TODO: or change the way InitParticleSystemsWB takes those in.
         go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
                     + new Vector3(3 * (_activations.Count - 1), 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
-        go.GetComponent<ParticleManager>().InitParticleSystemsWB(ConvertFloatArrToDoubleArr(_activations[3]));
+        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(output_layer_coordinates);
         signals_particle_objects.Add(go);
 
 
@@ -623,6 +648,10 @@ public class DataManager : MonoBehaviour
     {
         List<int> ids = new List<int> { class_index };
         DeleteExistingLines();
+
+
+        signals_particle_objects[class_average_signals[class_index].Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
+
         for (int index = class_average_signals[class_index].Count - 1; index >= 0; index--)
         {
             GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
@@ -632,10 +661,25 @@ public class DataManager : MonoBehaviour
             particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
             particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
 
-            ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
-                , 10, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids);
+            int line_amount = (int)Math.Round(max_lines / 10.0, MidpointRounding.AwayFromZero);
+            if (line_amount <= 0)
+            {
+                line_amount = 1;
+            }
 
+            if (class_normalized_lines)
+            {
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids);
+            }
+            else
+            {
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids, scales_per_layer[index]);
+            }
             connection_manager_objects.Add(connectivity_go);
+
+            signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
         }
     }
 
@@ -668,6 +712,16 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    private void ClearHighlightedParticles()
+    {
+        List<int> empty_list = new List<int>();
+
+        foreach (GameObject go in signals_particle_objects)
+        {
+            go.GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(empty_list);
+        }
+    }
+
     private void DeleteExistingLines()
     {
         for (int index = 0; index < connection_manager_objects.Count; index++)
@@ -675,8 +729,45 @@ public class DataManager : MonoBehaviour
             GameObject.Destroy(connection_manager_objects[index]);
         }
         connection_manager_objects = new List<GameObject>();
+
+        for (int index = 0; index < input_connectivity_objects.Count; index++)
+        {
+            GameObject.Destroy(input_connectivity_objects[index]);
+        }
+        input_connectivity_objects = new List<GameObject>();
     }
 
+    private void DeleteExistingParticles()
+    {
+        for (int index = 0; index < particle_objects.Count; index++)
+        {
+            GameObject.Destroy(particle_objects[index]);
+        }
+        particle_objects = new List<GameObject>();
+
+        for (int index = 0; index < input_particle_objects.Count; index++)
+        {
+            GameObject.Destroy(input_particle_objects[index]);
+        }
+        input_particle_objects = new List<GameObject>();
+
+        for (int index = 0; index < signals_particle_objects.Count; index++)
+        {
+            GameObject.Destroy(signals_particle_objects[index]);
+        }
+        signals_particle_objects = new List<GameObject>();
+    }
+
+    private void ResetOtherParameters()
+    {
+        hidden_layer_CTs = new List<ClusterTree>();
+        hidden_layer_embeddings = new List<float[][]>();
+        naps = null;
+        clustering_and_umap_done = false;
+        class_analysis_running = false;
+        class_average_activations = new List<List<float[]>>();
+        class_average_signals = new List<List<float[][]>>();
+}
 
     private double[,] ConvertFloatArrayToDoubleArray(float[][] floatArray)
     {

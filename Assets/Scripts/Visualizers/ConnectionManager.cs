@@ -170,7 +170,7 @@ public class ConnectionManager : MonoBehaviour
 
     }
 
-    public List<int> InitBackwardsPassOfLayers(double[,] _signals, int max_lines, List<ParticleSystem> neuron_particles, Transform tf1, Transform tf2, List<int> back_layer_ids)
+    public List<int> InitBackwardsPassOfLayers(double[,] _signals, int max_lines, List<ParticleSystem> neuron_particles, Transform tf1, Transform tf2, List<int> back_layer_ids, (double? min, double? max)? scale = null)
     {
         // Hashset ignores duplicats. Needs to be transformed into a regular List to return 
         HashSet<int> new_ids = new HashSet<int>();
@@ -226,30 +226,37 @@ public class ConnectionManager : MonoBehaviour
         double min;
         double max;
 
-
-        // Initialize min and max with the first element of the array
-        min = filtered_list[0, 0];
-        max = filtered_list[0, 0];
-
-        // Iterate through the array to find min and max
-        for (int i = 0; i < rows; i++)
+        if (scale.HasValue)
         {
-            for (int j = 0; j < cols; j++)
-            {
-                double currentValue = filtered_list[i, j];
+            min = (double)scale.Value.min;
+            max = (double)scale.Value.max;
+        }
+        else
+        {
+            // Initialize min and max with the first element of the array
+            min = filtered_list[0, 0];
+            max = filtered_list[0, 0];
 
-                // Update min and max values if necessary
-                if (currentValue < min)
+            // Iterate through the array to find min and max
+            for (int i = 0; i < rows; i++)
+            {
+                for (int j = 0; j < cols; j++)
                 {
-                    min = currentValue;
-                }
-                else if (currentValue > max)
-                {
-                    max = currentValue;
+                    double currentValue = filtered_list[i, j];
+
+                    // Update min and max values if necessary
+                    if (currentValue < min)
+                    {
+                        min = currentValue;
+                    }
+                    else if (currentValue > max)
+                    {
+                        max = currentValue;
+                    }
                 }
             }
         }
-        
+
 
         int line_number = 1;
         foreach ((int, int) position in n_positions)

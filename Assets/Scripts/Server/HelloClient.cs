@@ -13,9 +13,11 @@ public class HelloClient : MonoBehaviour
     public bool debug_trigger_task = false;
     public string input_train_or_test = "train";
     public int input_index = 1;
-    public List<String> models_available;
     // Just for Debugging purposes, later just display the Elements of the List directly
     public int model_index = 0;
+    public List<String> models_available;
+   
+    
 
     [HideInInspector]
     public bool task_running = false;
@@ -145,14 +147,7 @@ public class HelloClient : MonoBehaviour
                 }
                 break;
             case HelloRequester.task.load_model:
-                if (_helloRequester.messages is null)
-                {
-                    Debug.LogError("ERROR: The " + models_available[model_index] + " model wasn't loaded.");
-                }
-                else
-                {
-                    Debug.Log(models_available[model_index] + " model loaded succesfully!");
-                }
+                DealWithModelLoaded();
                 break;
             case HelloRequester.task.load_and_send_input_and_activations:
                 DealWithInputLoadingAndActivationDisplay();
@@ -268,6 +263,19 @@ public class HelloClient : MonoBehaviour
         }
 
         usedDataManager.InitParticleManagerForNaps(nap_arrays, 0);
+    }
+
+    private void DealWithModelLoaded()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: The " + models_available[model_index] + " model wasn't loaded.");
+        }
+        else
+        {
+            Debug.Log(models_available[model_index] + " model loaded succesfully!");
+            usedDataManager.CleanUpForNewLoadedModel();
+        }
     }
 
     private void DealWithClassAnalysis()
