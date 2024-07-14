@@ -31,6 +31,7 @@ public class HelloRequester : RunAbleThread
         send_class_average_activations,
         send_subset_activations,
         send_average_signals,
+        send_class_predictions_activations_and_sigs,
         send_class_average_signals,
         send_class_analysis_data,
         nothing
@@ -100,6 +101,9 @@ public class HelloRequester : RunAbleThread
                     break;
                 case task.send_class_average_signals:
                     SendClassAverageSignals(client);
+                    break;
+                case task.send_class_predictions_activations_and_sigs:
+                    SendClassPredictionsActivationsAndSigs(client);
                     break;
                 case task.send_class_analysis_data:
                     SendClassAnalysisData(client);
@@ -268,6 +272,7 @@ public class HelloRequester : RunAbleThread
         SendClassAverageActivations(client, false);
         SendSubsetActivations(client, false);
         SendClassAverageSignals(client, false);
+        SendClassPredictionsActivationsAndSigs(client, false);
     }
 
     private void TestTensor(RequestSocket client)
@@ -492,6 +497,32 @@ public class HelloRequester : RunAbleThread
         else
         {
             messages.Add(response);
+        }
+    }
+
+    private void SendClassPredictionsActivationsAndSigs(RequestSocket client, bool create_list = true)
+    {
+        client.SendFrame("send_class_predictions_activations_and_sigs");
+        List<String> message = new List<string>();
+        bool success = false;
+
+        while (Running)
+        {
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
+
+            if (success) break;
+        }
+
+        if (create_list)
+        {
+            messages = message;
+        }
+        else
+        {
+            foreach (string msg in message)
+            {
+                messages.Add(msg);
+            }
         }
     }
 

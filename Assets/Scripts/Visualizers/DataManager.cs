@@ -2,7 +2,11 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System;
+using System.Linq;
 using Unity.VisualScripting;
+using Unity.PlasticSCM.Editor.WebApi;
+using CielaSpike;
+using static UnityEditor.Experimental.AssetDatabaseExperimental.AssetDatabaseCounters;
 
 public class DataManager : MonoBehaviour
 {
@@ -35,7 +39,7 @@ public class DataManager : MonoBehaviour
     private List<GameObject> connection_manager_objects = new List<GameObject>();
 
     // Variables for full class analysis
-    [Range(0,9)]
+    [Range(0, 9)]
     public int class_index = 0;
     private int last_know_class_index = 0;
     private List<List<float[]>> class_average_activations;
@@ -48,11 +52,28 @@ public class DataManager : MonoBehaviour
     // Variables for Signal Lines
     public bool show_max_lines = true;
     private bool last_known_show_max_lines = true;
-    [Range(1,1000)]
+    [Range(1, 1000)] 
     public int max_lines = 100;
     private int last_known_max_lines = 100;
     public bool backwards_pass = false;
     private bool last_known_backwards_pass = false;
+    private List<List<int>> class_highlighted_neurons_for_backwards_pass = new List<List<int>>();
+
+    // Variables for different Class View Mode (looking at false or correct predictions only)
+    public class_view_mode current_class_view = class_view_mode.all;
+    private class_view_mode last_known_class_view = class_view_mode.all;
+    private List<List<float[]>> class_correct_average_activations;
+    private List<List<float[]>> class_incorrect_average_activations;
+    private List<List<float[][]>> class_correct_average_signals;
+    private List<List<float[][]>> class_incorrect_average_signals;
+
+
+    public enum class_view_mode
+    {
+        all,
+        correct,
+        incorrect
+    }
 
     // Start is called before the first frame update
     // TODO: add the last_known variables into here, so that they are loaded on start, in cases the original variables have been changed in inspector
@@ -71,6 +92,7 @@ public class DataManager : MonoBehaviour
         UpdateClusterSlider();
         UpdateMaxLinesSlider();
         UpdateToggles();
+        UpdateClassViewMode();
         bool update_done = UpdateParticles();
         if (update_done == true) { UpdateLines(); }
     }
@@ -97,9 +119,20 @@ public class DataManager : MonoBehaviour
             // TODO: This is hardcoded for simple MLP. Needs to be generalized eventually
             ParticleManager pm = signals_particle_objects[index+1].GetComponent<ParticleManager>();
 
-            foreach (Node cluster in clusters)
+            if (backwards_pass)
             {
-                pm.ClusterParticles(cluster.neuron_ids, hidden_layer_embeddings[index]);
+                foreach (Node cluster in clusters)
+                {
+                    bool containsHighlightedElement = cluster.neuron_ids.Any(b => class_highlighted_neurons_for_backwards_pass[index+1].Contains(b));
+                    pm.ClusterParticles(cluster.neuron_ids, hidden_layer_embeddings[index], containsHighlightedElement);
+                }
+            }
+            else
+            {
+                foreach (Node cluster in clusters)
+                {
+                    pm.ClusterParticles(cluster.neuron_ids, hidden_layer_embeddings[index]);
+                }
             }
         }
 
@@ -219,6 +252,23 @@ public class DataManager : MonoBehaviour
         }
 
         last_known_backwards_pass = backwards_pass;
+    }
+
+    private void UpdateClassViewMode()
+    {
+        if (class_analysis_running == false) return;
+        if (current_class_view == last_known_class_view) return;
+
+        if (backwards_pass)
+        {
+            BuildBackwardPassLines();
+        }
+        else
+        {
+            Rebuild_ClassAnalysis_Lines();
+        }
+
+        last_known_class_view = current_class_view;
     }
 
     private bool UpdateParticles()
@@ -553,7 +603,7 @@ public class DataManager : MonoBehaviour
         
     }
 
-    public void InitUmapLayoutWithFullData(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals)
+    public void InitUmapLayoutWithFullData(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals, List<List<float[][]>> _class_average_signals)
     {
         UmapReduction umap = new UmapReduction();
         int amount_of_layers = _activations.Count; // Helper: 4
@@ -561,7 +611,7 @@ public class DataManager : MonoBehaviour
         // Init particles of InputLayer
         int input_layer_size = _activations[0].Length;
         float[][] input_layer_coordinates = new float[input_layer_size][];
-
+        List<float[][]> combined_sigs = CombineClassSignalsForEachNeuronOutput(_class_average_signals);
         int amount_per_row = Mathf.FloorToInt(Mathf.Sqrt(input_layer_size));
         for (int index = 0; index < input_layer_size; index++)
         {
@@ -577,7 +627,7 @@ public class DataManager : MonoBehaviour
 
         for (int index = 1; index < _activations.Count - 1; index++)
         {
-            float[][] embeddings = umap.applyUMAP(_subset_activations[index], 1.4f);
+            float[][] embeddings = umap.applyUMAP(combined_sigs[index-1], 1.4f);
 
             GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
                 + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
@@ -585,7 +635,7 @@ public class DataManager : MonoBehaviour
             signals_particle_objects.Add(_tmp);
             
             hidden_layer_embeddings.Add(embeddings);
-            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(_subset_activations[index])));
+            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(combined_sigs[index-1])));
         }
 
         // Init Output Layer Particles
@@ -628,12 +678,101 @@ public class DataManager : MonoBehaviour
         clustering_and_umap_done = true;
     }
 
-    public void InitFullAnalysisOfClass(List<List<float[]>> _class_average_activations, List<float[][]> _subset_activations, List<List<float[][]>> _class_average_signals )
+    IEnumerator InitUmapLayoutCoroutine(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals, List<List<float[][]>> _class_average_signals)
+    {
+        UmapReduction umap = new UmapReduction();
+        int amount_of_layers = _activations.Count; // Helper: 4
+
+        // Init particles of InputLayer
+        int input_layer_size = _activations[0].Length;
+        float[][] input_layer_coordinates = new float[input_layer_size][];
+        List<float[][]> combined_sigs = CombineClassSignalsForEachNeuronOutput(_class_average_signals);
+        int amount_per_row = Mathf.FloorToInt(Mathf.Sqrt(input_layer_size));
+        for (int index = 0; index < input_layer_size; index++)
+        {
+            float x = ((index % amount_per_row) - (amount_per_row / 2)) * 0.1f;
+            float y = (Mathf.Floor(index / amount_per_row) - (amount_per_row / 2)) * -0.1f;
+
+            input_layer_coordinates[index] = new float[] { x, y };
+        }
+
+        GameObject go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(input_layer_coordinates);
+        signals_particle_objects.Add(go);
+
+        for (int index = 1; index < _activations.Count - 1; index++)
+        {
+            float[][] embeddings = umap.applyUMAP(combined_sigs[index - 1], 1.4f);
+
+            GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+            _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
+            signals_particle_objects.Add(_tmp);
+
+            hidden_layer_embeddings.Add(embeddings);
+            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(combined_sigs[index - 1])));
+        }
+
+        // Init Output Layer Particles
+        int output_layer_size = _activations[_activations.Count - 1].Length;
+
+        float[][] output_layer_coordinates = new float[output_layer_size][];
+
+        for (int index = 0; index < output_layer_size; index++)
+        {
+            float x = ((index % output_layer_size) - (output_layer_size / 2)) * 0.1f;
+            float y = 0f;
+
+            output_layer_coordinates[index] = new float[] { x, y };
+        }
+
+        // TODO: Don't use InitParticleSystemWB, build a new function with similar functionality but custom positioning of the particles,
+        // TODO: or change the way InitParticleSystemsWB takes those in.
+        go = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                    + new Vector3(3 * (_activations.Count - 1), 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+        go.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(output_layer_coordinates);
+        signals_particle_objects.Add(go);
+
+
+        // Init Signal Lines
+        for (int index = 0; index < _signals.Count; index++)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(_signals[index])
+                , 100, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform);
+
+            connection_manager_objects.Add(connectivity_go);
+        }
+
+        clustering_and_umap_done = true;
+        yield return null;
+    }
+
+    IEnumerator _InitUmapLayoutCoroutine(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals, List<List<float[][]>> _class_average_signals)
+    {
+        Task task;
+        this.StartCoroutineAsync(InitUmapLayoutCoroutine(_activations, _subset_activations, _signals, _class_average_signals), out task);
+        yield return StartCoroutine(task.Wait());
+        LogState(task);
+    }
+
+    public void InitFullAnalysisOfClass(List<List<float[]>> _class_average_activations, List<float[][]> _subset_activations, List<List<float[][]>> _class_average_signals, List<List<float[]>> _class_correct_average_activations, List<List<float[]>> _class_incorrect_average_activations, List<List<float[][]>> _class_correct_average_signals, List<List<float[][]>> _class_incorrect_average_signals)
     {
         class_average_activations = _class_average_activations;
         class_average_signals = _class_average_signals;
+        class_correct_average_activations = _class_correct_average_activations;
+        class_incorrect_average_activations = _class_incorrect_average_activations;
+        class_correct_average_signals = _class_correct_average_signals;
+        class_incorrect_average_signals = _class_incorrect_average_signals;
         class_analysis_running = true;
-        InitUmapLayoutWithFullData(class_average_activations[class_index], _subset_activations, class_average_signals[class_index]);
+        InitUmapLayoutWithFullData(class_average_activations[class_index], _subset_activations, class_average_signals[class_index], class_average_signals);
+        //StartCoroutine(_InitUmapLayoutCoroutine(class_average_activations[class_index], _subset_activations, class_average_signals[class_index], class_average_signals));
     }
 
     public void Show_Different_ClassNAPs(int class_index)
@@ -649,10 +788,14 @@ public class DataManager : MonoBehaviour
         List<int> ids = new List<int> { class_index };
         DeleteExistingLines();
 
+        List<float[][]> used_signals;
 
-        signals_particle_objects[class_average_signals[class_index].Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
+        SetUsedList(out used_signals);
 
-        for (int index = class_average_signals[class_index].Count - 1; index >= 0; index--)
+        signals_particle_objects[used_signals.Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
+        class_highlighted_neurons_for_backwards_pass.Add(new List<int> { class_index });
+
+        for (int index = used_signals.Count - 1; index >= 0; index--)
         {
             GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
 
@@ -669,17 +812,18 @@ public class DataManager : MonoBehaviour
 
             if (class_normalized_lines)
             {
-                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(used_signals[index])
                 , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids);
             }
             else
             {
-                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(used_signals[index])
                 , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids, scales_per_layer[index]);
             }
             connection_manager_objects.Add(connectivity_go);
+            class_highlighted_neurons_for_backwards_pass.Insert(0, ids);
 
-            signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
+           signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
         }
     }
 
@@ -687,7 +831,11 @@ public class DataManager : MonoBehaviour
     {
         DeleteExistingLines();
 
-        for (int index = 0; index < class_average_signals[class_index].Count; index++)
+        List<float[][]> used_signals;
+
+        SetUsedList(out used_signals);
+
+        for (int index = 0; index < used_signals.Count; index++)
         {
             GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
 
@@ -698,13 +846,13 @@ public class DataManager : MonoBehaviour
 
             if (class_normalized_lines)
             {
-                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(used_signals[index])
                     , max_lines, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, use_max_values: show_max_lines);
 
             }
             else
             {
-                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(class_average_signals[class_index][index])
+                connectivity_go.GetComponent<ConnectionManager>().InitFixedConnectivity(ConvertFloatArrayToDoubleArray(used_signals[index])
                     , max_lines, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, scales_per_layer[index], use_max_values: show_max_lines);
             }
 
@@ -758,6 +906,29 @@ public class DataManager : MonoBehaviour
         signals_particle_objects = new List<GameObject>();
     }
 
+    private void SetUsedList(out List<float[][]> list)
+    {
+
+        if (current_class_view == class_view_mode.all)
+        {
+            list = class_average_signals[class_index];
+        }
+        else if (current_class_view == class_view_mode.correct)
+        {
+            list = class_correct_average_signals[class_index];
+
+        }
+        else if (current_class_view == class_view_mode.incorrect)
+        {
+            list = class_incorrect_average_signals[class_index];
+        }
+        else
+        {
+            list = new List<float[][]>();
+            Debug.LogError("Unkown class_view_mode selected. Make sure to add the neccessary code here!");
+            return;
+        }
+    }
     private void ResetOtherParameters()
     {
         hidden_layer_CTs = new List<ClusterTree>();
@@ -769,6 +940,34 @@ public class DataManager : MonoBehaviour
         class_average_signals = new List<List<float[][]>>();
 }
 
+    private List<float[][]> CombineClassSignalsForEachNeuronOutput(List<List<float[][]>> list)
+    {
+        List<float[][]> result = new List<float[][]>();
+
+        for (int layer_index = 1; layer_index < list[0].Count; layer_index++)
+        {
+            float[][] signals = new float[list[0][layer_index].Length][];
+            
+            for (int neuron_index = 0; neuron_index < list[0][layer_index].Length; neuron_index++)
+            {
+                int nbr_of_sigs_per_neuron = list[0][layer_index][0].Length;
+                float[] neuron_sigs = new float[(nbr_of_sigs_per_neuron * list.Count)];
+                for(int class_index = 0; class_index < list.Count; class_index++)
+                {
+                    for (int index=0; index < list[class_index][layer_index][neuron_index].Length; index++)
+                    {
+                        int full_index = nbr_of_sigs_per_neuron * class_index + index;
+                        neuron_sigs[full_index] = list[class_index][layer_index][neuron_index][index];
+                    }
+                }
+                signals[neuron_index] = neuron_sigs;
+            }
+            result.Add(signals);
+        }
+
+        return result;
+    }
+        
     private double[,] ConvertFloatArrayToDoubleArray(float[][] floatArray)
     {
         int numRows = floatArray.Length;
@@ -798,6 +997,11 @@ public class DataManager : MonoBehaviour
         }
 
         return doubleArray;
+    }
+
+    private void LogState(Task task)
+    {
+        Debug.Log("[State]" + task.State);
     }
 
     public List<(double min, double max)> FindMinMax(List<List<float[][]>> my_list)

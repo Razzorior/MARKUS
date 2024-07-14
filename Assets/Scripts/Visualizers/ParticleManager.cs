@@ -6,7 +6,6 @@ using System.Linq;
 using MathNet.Numerics.LinearAlgebra;
 using System;
 
-//Reload!
 public class ParticleManager : MonoBehaviour
 {
     [HideInInspector]
@@ -22,7 +21,7 @@ public class ParticleManager : MonoBehaviour
 
         if (ps is null) 
         {
-            Debug.Log("ParticleManager failed loading the particle System");
+            Debug.LogError("ParticleManager failed loading the particle System");
             return;
         }
     }
@@ -59,6 +58,11 @@ public class ParticleManager : MonoBehaviour
         elementsToRemove.Sort((a, b) => b.CompareTo(a));
         foreach (int index in elementsToRemove)
         {
+            if(clustering_Requests[index].highlight)
+                particles[clustering_Requests[index].id].startColor = Color.red;
+            else
+                particles[clustering_Requests[index].id].startColor = Color.grey;
+
             clustering_Requests.RemoveAt(index);
         }
 
@@ -442,7 +446,7 @@ public class ParticleManager : MonoBehaviour
     }
 
     // TODO: Write Clustering Function that takes the neuron/particle ids and their UMAP Positions and clusters them together.
-    public void ClusterParticles(List<int> neuron_ids, float[][] embeddings)
+    public void ClusterParticles(List<int> neuron_ids, float[][] embeddings, bool highlight_neurons_at_end = false)
     {
         // Check if there are already requests with given ids going on
 
@@ -486,7 +490,7 @@ public class ParticleManager : MonoBehaviour
         foreach (int id in neuron_ids)
         {
             Vector3 current_position = particles[id].position;
-            new_request = new ClusteringRequest(id, current_position, new Vector3(target_x, target_y, 0f), start_time);
+            new_request = new ClusteringRequest(id, current_position, new Vector3(target_x, target_y, 0f), start_time, highlight_neurons_at_end);
             clustering_Requests.Add(new_request);
         }
     }
@@ -512,12 +516,14 @@ public class ClusteringRequest
     public Vector3 start_position { get; set; }
     public Vector3 target_position { get; set; }
     public float start_time { get; set; }
+    public bool highlight { get; set; }
 
-    public ClusteringRequest(int _id, Vector3 _start_position, Vector3 _target_position, float _start_time)
+    public ClusteringRequest(int _id, Vector3 _start_position, Vector3 _target_position, float _start_time, bool _highlight)
     {
         id = _id;
         start_position = _start_position;
         target_position = _target_position;
         start_time = _start_time;
+        highlight = _highlight;
     }
 }

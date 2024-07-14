@@ -182,6 +182,9 @@ public class HelloClient : MonoBehaviour
             case HelloRequester.task.test_tensor:
                 Debug.Log("Done");
                 break;
+            case HelloRequester.task.send_class_predictions_activations_and_sigs:
+                DealWithClassPredictionsActivationsAndSigs();
+                break;
             case HelloRequester.task.send_class_analysis_data:
                 DealWithClassAnalysis();
                 break;
@@ -294,8 +297,12 @@ public class HelloClient : MonoBehaviour
         List<List<float[]>> class_acts = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
         List<float[][]> subset_acts = TurnJSONIntoListNestedArray(_helloRequester.messages[1]);
         List<List<float[][]>> class_sigs = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[2]);
+        List<List<float[]>> class_correct_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[3]);
+        List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[4]);
+        List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[5]);
+        List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[6]);
 
-        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs);
+        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals);
     }
     private void DealWithWeightDisplay()
     {
@@ -454,6 +461,28 @@ public class HelloClient : MonoBehaviour
         Debug.Log("Class Count " + class_average_signals.Count);
         Debug.Log("Layer Count " + class_average_signals[0].Count);
         Debug.Log("Random Value Check" + class_average_signals[0][0][128][65]);
+    }
+
+    private void DealWithClassPredictionsActivationsAndSigs()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: The Server didn't respond to send class average signals.");
+            return;
+        }
+
+        if (_helloRequester.messages.Count != 4)
+        {
+            Debug.LogError("Expected 4 messages, but only got " + _helloRequester.messages.Count);
+            return;
+        }
+
+        //TODO: Make sure to test this with an empty class as well, as there might be models, that don't fail on a class, or don't succeed
+        List<List<float[]>> class_correct_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
+        List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[1]);
+        List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[2]);
+        List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[3]);
+
     }
 
     // TODO: Turn this Regex mess into actually using Newtonsoft.JSON.. Didn't work initially 
