@@ -10,15 +10,14 @@ using UnityEngine.Networking.PlayerConnection;
 // TODO: Write multiple classes for each task I guess.. Maybe come up with a better solution
 public class HelloRequester : RunAbleThread
 {
-
     public enum task
     {
         handshake,
         load_model,
-        load_simple_mlp,
         load_input,
         load_and_send_input_and_activations,
         load_and_send_input_and_ig,
+        load_model_and_send_class_analysis_data,
         large_mlp,
         cnn,
         test,
@@ -57,9 +56,6 @@ public class HelloRequester : RunAbleThread
                 case task.handshake:
                     Handshake(client);
                     break;
-                case task.load_simple_mlp:
-                    LoadSimpleMLP(client);
-                    break;
                 case task.load_input:
                     LoadInput(client);
                     break;
@@ -71,6 +67,9 @@ public class HelloRequester : RunAbleThread
                     break;
                 case task.load_and_send_input_and_ig:
                     LoadAndSendInputAndIG(client);
+                    break;
+                case task.load_model_and_send_class_analysis_data:
+                    LoadModelAndSendClassAnalysisData(client);
                     break;
                 case task.test:
                     ExecuteTestMessages(client);
@@ -110,7 +109,7 @@ public class HelloRequester : RunAbleThread
                     break;
             }
         }
-        NetMQConfig.Cleanup(); // this line is needed to prevent unity freeze after one use, not sure why yet
+        NetMQConfig.Cleanup(); // this line is needed to prevent unity freeze after one use
         task_done = true;
     }
 
@@ -160,24 +159,6 @@ public class HelloRequester : RunAbleThread
         }
 
         List<string> response = new List<string> { message };
-        messages = response;
-    }
-
-    private void LoadSimpleMLP(RequestSocket client)
-    {
-        Debug.Log("Asking for python server to load the simple MLP model.");
-        client.SendFrame("load_simple_mlp");
-        string message = null;
-        bool gotMessage = false;
-        while (Running)
-        {
-            gotMessage = client.TryReceiveFrameString(out message);
-            if (gotMessage) break;
-        }
-
-        if (gotMessage) Debug.Log("Received " + message);
-
-        List<String> response = new List<string> { message };
         messages = response;
     }
 
@@ -264,6 +245,12 @@ public class HelloRequester : RunAbleThread
         messages = new List<string>();
         SendInput(client, false);
         SendIntegratedGradients(client, false);
+    }
+
+    private void LoadModelAndSendClassAnalysisData(RequestSocket client)
+    {
+        LoadModel(client);
+        SendClassAnalysisData(client);
     }
 
     private void SendClassAnalysisData(RequestSocket client)

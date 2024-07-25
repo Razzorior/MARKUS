@@ -492,7 +492,14 @@ public class ParticleManager : MonoBehaviour
             Vector3 current_position = particles[id].position;
             new_request = new ClusteringRequest(id, current_position, new Vector3(target_x, target_y, 0f), start_time, highlight_neurons_at_end);
             clustering_Requests.Add(new_request);
+
+            if (highlight_neurons_at_end == false)
+            {
+                particles[id].startColor = Color.grey;
+            }
         }
+
+        ps.SetParticles(particles);
     }
 
     public static double[] GetRow(double[,] matrix, int rowIndex)

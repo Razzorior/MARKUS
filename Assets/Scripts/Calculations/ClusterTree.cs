@@ -1,14 +1,15 @@
-using System.Collections;
 using UnityEngine;
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using Newtonsoft.Json;
 
-public class ClusterTree : MonoBehaviour
+[Serializable]
+public class ClusterTree
 {
-    Dictionary<int, ValueContainer> dict = new Dictionary<int, ValueContainer>();
-    public Node root = null;
-    public int max_size;
+    [JsonIgnore] Dictionary<int, ValueContainer> dict = new Dictionary<int, ValueContainer>();
+    [SerializeField] public Node root = null;
+    [SerializeField] public int max_size;
 
     public ClusterTree(double[] attribute)
     {
@@ -18,7 +19,7 @@ public class ClusterTree : MonoBehaviour
         {
             dict.Add(index, new ValueContainer { SingleDouble = (attribute[index]) });
         }
-        
+
         CreateTree(attribute);
     }
 
@@ -32,6 +33,13 @@ public class ClusterTree : MonoBehaviour
         }
 
         CreateTree(attribute);
+    }
+
+    [JsonConstructor]
+    public ClusterTree(Dictionary<int, ValueContainer> _dict, Node _root, int _max_size)
+    {
+        this.root = _root;
+        this.max_size = _max_size;
     }
 
     public List<Node> GetClusters(int amount_of_clusters)
@@ -86,7 +94,7 @@ public class ClusterTree : MonoBehaviour
         // Add initial leaves
         for (int index = 0; index < values.Length; index++)
         {
-            active_clusters.Add(new Node(dict, null, new List<Node>(0), new List<int> { index }, 0.0, false));
+            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, false));
         }
 
 
@@ -109,7 +117,7 @@ public class ClusterTree : MonoBehaviour
         // Add initial leaves
         for (int index = 0; index < values.GetLength(0); index++)
         {
-            active_clusters.Add(new Node(dict, null, new List<Node>(0), new List<int> { index }, 0.0, true));
+            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, true));
         }
 
         //Debug.Log("Initial Leaves Count: " + active_clusters.Count);
@@ -206,12 +214,9 @@ public class ClusterTree : MonoBehaviour
 
         // Add new merged cluster to list and remove it's old individual clusters from list
         List<int> merged_neuron_ids = active_clusters[index1].neuron_ids.Concat(active_clusters[index2].neuron_ids).ToList();
-        Node new_cluster = new(dict, null, new List<Node> { active_clusters[index1], active_clusters[index2] }, merged_neuron_ids, distance / 2.0, active_clusters[index1].is_array);
+        Node new_cluster = new (dict, new List<Node> { active_clusters[index1], active_clusters[index2] }, merged_neuron_ids, distance / 2.0, active_clusters[index1].is_array);
         //Debug.Log(active_clusters[index1]);
         //Debug.Log(active_clusters[index2]);
-        active_clusters[index1].parent = new_cluster;
-        active_clusters[index2].parent = new_cluster;
-
         active_clusters.Add(new_cluster);
 
         if (index1 > index2)
@@ -279,23 +284,31 @@ public class ClusterTree : MonoBehaviour
 
         return row;
     }
-
-
 }
 
+[Serializable]
 public class Node
 {
-    public Node parent { get; set; }
-    public List<Node> children { get; set; }
-    public List<int> neuron_ids { get; set; }
-    public bool is_array { get; set; }
-    public double length { get; set; }
-    public double average_single { get; set; }
-    public double[] average_array { get; set; }
+    [SerializeField] public List<Node> children { get; set; }
+    [SerializeField] public List<int> neuron_ids { get; set; }
+    [SerializeField] public bool is_array { get; set; }
+    [SerializeField] public double length { get; set; }
+    [JsonIgnore] public double average_single { get; set; }
+    [JsonIgnore] public double[] average_array { get; set; }
 
-    public Node(Dictionary<int, ValueContainer> dict, Node _parent, List<Node> _child, List<int> _neuron_ids, double _length, bool _is_array)
+
+    [JsonConstructor]
+    public Node(List<Node> _children, List<int> _neuron_ids, bool _is_array, double _length)
     {
-        parent = _parent;
+        this.children = _children;
+        this.neuron_ids = _neuron_ids;
+        this.is_array = _is_array;
+        this.length = _length;
+    }
+
+    public Node(Dictionary<int, ValueContainer> dict, List<Node> _child, List<int> _neuron_ids, double _length, bool _is_array)
+    {
+
         children = _child;
         neuron_ids = _neuron_ids;
         length = _length;
@@ -387,8 +400,10 @@ public class Node
     }
 }
 
+[Serializable]
 public class ValueContainer
 {
-    public double SingleDouble { get; set; }
-    public double[] ArrayDouble { get; set; }
+    [SerializeField] public double SingleDouble { get; set; }
+    [SerializeField] public double[] ArrayDouble { get; set; }
+
 }

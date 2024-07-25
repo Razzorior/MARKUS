@@ -24,6 +24,8 @@ public class HelloClient : MonoBehaviour
 
     private DataManager usedDataManager = null;
 
+    
+
     private void Start()
     {
         // Keep this, so that it only has to be loaded once
@@ -124,74 +126,42 @@ public class HelloClient : MonoBehaviour
                 // TODO: Add Check if the model_index is out of bounds
                 _helloRequester.string_param_1 = models_available[model_index];
                 break;
+            case HelloRequester.task.load_model_and_send_class_analysis_data:
+                // TODO: Add Check if the model_index is out of bounds
+                _helloRequester.string_param_1 = models_available[model_index];
+                _helloRequester.int_param_1 = input_index;
+                break;
         }
     }
 
-    //TODO: Logic for each HelloRequester.task
+    // Logic for each HelloRequester.task
     private void DealWithMessageAccordingToGivenTask()
     {
-        // Make sure that you have the logic for each task_to_do in this switch case!
-        switch (_helloRequester.task_to_do)
+        var taskActions = new Dictionary<HelloRequester.task, Action>
         {
-            case HelloRequester.task.handshake:
-                DealWithHandshake();
-                break;
-            case HelloRequester.task.load_simple_mlp:
-                if (_helloRequester.messages is null)
-                {
-                    Debug.LogError("ERROR: The simple MLP model wasn't loaded.");
-                }
-                else
-                {
-                    Debug.Log("Simple MLP model loaded succesfully!");
-                }
-                break;
-            case HelloRequester.task.load_model:
-                DealWithModelLoaded();
-                break;
-            case HelloRequester.task.load_and_send_input_and_activations:
-                DealWithInputLoadingAndActivationDisplay();
-                break;
-            case HelloRequester.task.load_and_send_input_and_ig:
-                DealWithInputLoadingAndIGDisplay();
-                break;
-            case HelloRequester.task.send_naps:
-                DealWithNAPS();
-                break;
-            case HelloRequester.task.send_weighted_activations:
-                DealWithWeightedActivations();
-                break;
-            case HelloRequester.task.send_average_activations:
-                DealWithAverageActivations();
-                break;
-            case HelloRequester.task.send_class_average_activations:
-                DealWithClassAverageActivations();
-                break;
-            case HelloRequester.task.send_subset_activations:
-                DealWithSubsetActivations();
-                break;
-            case HelloRequester.task.send_average_signals:
-                DealWithAverageSignals();
-                break;
-            case HelloRequester.task.send_class_average_signals:
-                DealWithClassAverageSignals();
-                break;
-            case HelloRequester.task.display_weights:
-                DealWithWeightDisplay();
-                break;
-            case HelloRequester.task.test_tensor:
-                Debug.Log("Done");
-                break;
-            case HelloRequester.task.send_class_predictions_activations_and_sigs:
-                DealWithClassPredictionsActivationsAndSigs();
-                break;
-            case HelloRequester.task.send_class_analysis_data:
-                DealWithClassAnalysis();
-                break;
-            default:
-                Debug.LogError("It seems like you are missing a task_to_do in the HelloClient.cs Function 'DealWithMessageAccordingToGiven Task()!");
-                Debug.LogError(_helloRequester.task_to_do);
-                break;
+            { HelloRequester.task.handshake, DealWithHandshake },
+            { HelloRequester.task.load_model, DealWithModelLoaded },
+            { HelloRequester.task.load_and_send_input_and_activations, DealWithInputLoadingAndActivationDisplay },
+            { HelloRequester.task.load_and_send_input_and_ig,  DealWithInputLoadingAndIGDisplay },
+            { HelloRequester.task.load_model_and_send_class_analysis_data, DealWithModelLoadedAndClassAnalysis },
+            { HelloRequester.task.send_naps, DealWithNAPS },
+            { HelloRequester.task.send_weighted_activations, DealWithWeightedActivations },
+            { HelloRequester.task.send_average_activations, DealWithAverageActivations },
+            { HelloRequester.task.send_class_average_activations, DealWithClassAverageActivations },
+            { HelloRequester.task.send_subset_activations, DealWithSubsetActivations },
+            { HelloRequester.task.send_average_signals, DealWithAverageSignals },
+            { HelloRequester.task.send_class_average_signals, DealWithClassAverageSignals },
+            { HelloRequester.task.display_weights, DealWithWeightDisplay },
+            { HelloRequester.task.send_class_predictions_activations_and_sigs, DealWithClassPredictionsActivationsAndSigs },
+            { HelloRequester.task.send_class_analysis_data, DealWithClassAnalysis },
+        };
+        if (taskActions.TryGetValue(_helloRequester.task_to_do, out var action))
+        {
+            action.Invoke();
+        }
+        else
+        {
+            Debug.LogError($"Task {_helloRequester.task_to_do} not found!");
         }
     }
 
@@ -277,8 +247,16 @@ public class HelloClient : MonoBehaviour
         else
         {
             Debug.Log(models_available[model_index] + " model loaded succesfully!");
+            usedDataManager.SetLoadedModelName( models_available[model_index]);
             usedDataManager.CleanUpForNewLoadedModel();
         }
+    }
+
+    private void DealWithModelLoadedAndClassAnalysis()
+    {
+        usedDataManager.SetLoadedModelName(models_available[model_index]);
+        usedDataManager.CleanUpForNewLoadedModel();
+        DealWithClassAnalysis();
     }
 
     private void DealWithClassAnalysis()
@@ -304,6 +282,7 @@ public class HelloClient : MonoBehaviour
 
         usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals);
     }
+
     private void DealWithWeightDisplay()
     {
         if (_helloRequester.messages is null)
@@ -326,16 +305,7 @@ public class HelloClient : MonoBehaviour
             biases.Add(converted_message_bias);
         }
 
-        /*foreach (string message in _helloRequester.messages)
-        {
-            double[,] converted_message_weight= TurnJSONintoDoubleArray(message);
-            double[] converted_message_bias = TurnJSONintoDoubleList(message);
-            weight_arrays.Add(converted_message_weight);
-            biases.Add(converted_message_bias);
-        }*/
-
         usedDataManager.InitParticleManagerMLP(weight_arrays, biases);
-
     }
 
     private void DealWithWeightedActivations()

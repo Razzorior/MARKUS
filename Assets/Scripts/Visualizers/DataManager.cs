@@ -3,10 +3,9 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using System.Linq;
-using Unity.VisualScripting;
-using Unity.PlasticSCM.Editor.WebApi;
 using CielaSpike;
-using static UnityEditor.Experimental.AssetDatabaseExperimental.AssetDatabaseCounters;
+using System.IO;
+using Newtonsoft.Json;
 
 public class DataManager : MonoBehaviour
 {
@@ -19,12 +18,15 @@ public class DataManager : MonoBehaviour
     public Vector3 sphere_starting_pos = new Vector3(15f, 1f, 3f);
     public bool umap_rasterization = false;
 
+    private string model_loaded = "none";
     // Stuff for experiments
     public bool experiment_running = false;
     public Action<List<float[][]>> experiment_function;
+    public Action<List<List<Vector3>>> experiment_function2;
+    public UMAPData data_source_for_umap;
 
     // TODO: Write dynamic script. So far this is hard coded for MNIST
-    [Range(1, 100)]
+   [Range(1, 100)]
     public int hidden_layer_cluster = 100;
     private int last_know_hidden_layer_cluster = 100;
     private bool clustering_and_umap_done = false;
@@ -60,19 +62,26 @@ public class DataManager : MonoBehaviour
     private List<List<int>> class_highlighted_neurons_for_backwards_pass = new List<List<int>>();
 
     // Variables for different Class View Mode (looking at false or correct predictions only)
-    public class_view_mode current_class_view = class_view_mode.all;
-    private class_view_mode last_known_class_view = class_view_mode.all;
+    public ClassViewMode current_class_view = ClassViewMode.all;
+    private ClassViewMode last_known_class_view = ClassViewMode.all;
     private List<List<float[]>> class_correct_average_activations;
     private List<List<float[]>> class_incorrect_average_activations;
     private List<List<float[][]>> class_correct_average_signals;
     private List<List<float[][]>> class_incorrect_average_signals;
 
-
-    public enum class_view_mode
+    public enum ClassViewMode
     {
         all,
         correct,
         incorrect
+    }
+
+    public enum UMAPData
+    {
+        input,
+        output,
+        input_and_output,
+        subset_activations
     }
 
     // Start is called before the first frame update
@@ -597,6 +606,7 @@ public class DataManager : MonoBehaviour
             Debug.Log(str);
             cluster_index++;
         }*/
+        
         clustering_and_umap_done = true;
 
         Debug.Log("Done with cluster computation");
@@ -611,8 +621,34 @@ public class DataManager : MonoBehaviour
         // Init particles of InputLayer
         int input_layer_size = _activations[0].Length;
         float[][] input_layer_coordinates = new float[input_layer_size][];
-        List<float[][]> combined_sigs = CombineClassSignalsForEachNeuronOutput(_class_average_signals);
+        List<float[][]> combined_sigs = new List<float[][]>();
         int amount_per_row = Mathf.FloorToInt(Mathf.Sqrt(input_layer_size));
+        bool existing_precalculations = DoPrecalculationsForModelExist(model_loaded);
+
+        // If precalcs exist, and no experiment is running, where UMAP embeddings need to be recalculated, load precalculated embeddings.
+        if (existing_precalculations && !experiment_running)
+        {
+            hidden_layer_embeddings = LoadEmbeddings(model_loaded);
+        }
+        else
+        {
+            if (experiment_running)
+            {
+                combined_sigs = data_source_for_umap switch
+                {
+                    UMAPData.input => CombineClassSignalsForEachNeuronInput(_class_average_signals),
+                    UMAPData.output => CombineClassSignalsForEachNeuronOutput(_class_average_signals),
+                    UMAPData.input_and_output => CombineClassSignalsForEachNeuronInputOutput(_class_average_signals),
+                    UMAPData.subset_activations => _subset_activations,
+                    _ => throw new NotImplementedException()
+                };
+            }
+            else
+            {
+                combined_sigs = CombineClassSignalsForEachNeuronInputOutput(_class_average_signals);
+            }
+        }
+
         for (int index = 0; index < input_layer_size; index++)
         {
             float x = ((index % amount_per_row) - (amount_per_row / 2)) * 0.1f;
@@ -627,15 +663,28 @@ public class DataManager : MonoBehaviour
 
         for (int index = 1; index < _activations.Count - 1; index++)
         {
-            float[][] embeddings = umap.applyUMAP(combined_sigs[index-1], 1.4f);
+            if (!existing_precalculations || experiment_running)
+            {
 
-            GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
-                + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
-            _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
-            signals_particle_objects.Add(_tmp);
-            
-            hidden_layer_embeddings.Add(embeddings);
-            hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(combined_sigs[index-1])));
+                float[][] embeddings = umap.applyUMAP(combined_sigs[index - 1], 1.4f);
+
+                GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                    + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+                _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(embeddings);
+                signals_particle_objects.Add(_tmp);
+
+                hidden_layer_embeddings.Add(embeddings);
+
+                if(!experiment_running)
+                    hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(combined_sigs[index - 1])));
+            }
+            else
+            {
+                GameObject _tmp = Instantiate(particle_prefab, particle_starting_pos + new Vector3(12f, 0f, 0f)
+                    + new Vector3(3 * index, 0f, 0f), Quaternion.Euler(0, 90, 0) * Quaternion.identity);
+                _tmp.GetComponent<ParticleManager>().InitParticleSystemsWithGivenPositions(hidden_layer_embeddings[index-1]);
+                signals_particle_objects.Add(_tmp);
+            }
         }
 
         // Init Output Layer Particles
@@ -674,7 +723,26 @@ public class DataManager : MonoBehaviour
 
             connection_manager_objects.Add(connectivity_go);
         }
-        
+
+        if (experiment_running == true)
+        {
+            List<List<Vector3>> posistions_of_highlighted_neurons = BuildBackwardPassLinesExp();
+            experiment_function2(posistions_of_highlighted_neurons);
+            return;
+        }
+
+        if (!existing_precalculations)
+        {
+            Debug.Log("Trying to save precalculations");
+            Directory.CreateDirectory("Assets/Precalculations/" + model_loaded);
+            SaveEmbeddings(model_loaded, hidden_layer_embeddings);
+            SaveClusterTrees(model_loaded, hidden_layer_CTs);
+        }
+        else
+        {
+            hidden_layer_CTs = LoadClusterTrees(model_loaded);
+        }
+
         clustering_and_umap_done = true;
     }
 
@@ -686,7 +754,7 @@ public class DataManager : MonoBehaviour
         // Init particles of InputLayer
         int input_layer_size = _activations[0].Length;
         float[][] input_layer_coordinates = new float[input_layer_size][];
-        List<float[][]> combined_sigs = CombineClassSignalsForEachNeuronOutput(_class_average_signals);
+        List<float[][]> combined_sigs = CombineClassSignalsForEachNeuronInputOutput(_class_average_signals);
         int amount_per_row = Mathf.FloorToInt(Mathf.Sqrt(input_layer_size));
         for (int index = 0; index < input_layer_size; index++)
         {
@@ -783,6 +851,11 @@ public class DataManager : MonoBehaviour
         }
     }
 
+    public void SetLoadedModelName(string model_name)
+    {
+        model_loaded = model_name;
+    }
+
     private void BuildBackwardPassLines()
     {
         List<int> ids = new List<int> { class_index };
@@ -794,6 +867,8 @@ public class DataManager : MonoBehaviour
 
         signals_particle_objects[used_signals.Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
         class_highlighted_neurons_for_backwards_pass.Add(new List<int> { class_index });
+
+        List<List<Vector3>> highlighted_pos = new List<List<Vector3>>();
 
         for (int index = used_signals.Count - 1; index >= 0; index--)
         {
@@ -823,8 +898,78 @@ public class DataManager : MonoBehaviour
             connection_manager_objects.Add(connectivity_go);
             class_highlighted_neurons_for_backwards_pass.Insert(0, ids);
 
-           signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
+            signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
+
+
+            highlighted_pos.Add(GetHighlightedPositionsFromBackwardPass(ids, signals_particle_objects[index].GetComponent<ParticleSystem>()));
+
         }
+    }
+
+    private List<List<Vector3>> BuildBackwardPassLinesExp()
+    {
+        List<int> ids = new List<int> { class_index };
+        DeleteExistingLines();
+
+        List<float[][]> used_signals;
+
+        SetUsedList(out used_signals);
+
+        signals_particle_objects[used_signals.Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
+        class_highlighted_neurons_for_backwards_pass.Add(new List<int> { class_index });
+
+        List<List<Vector3>> highlighted_pos = new List<List<Vector3>>();
+
+        for (int index = used_signals.Count - 1; index >= 0; index--)
+        {
+            GameObject connectivity_go = Instantiate(connectivity_prefab, Vector3.zero, Quaternion.identity);
+
+            // Adding the particle systems auf the two layers to connect.
+            List<ParticleSystem> particle_systems = new List<ParticleSystem>();
+            particle_systems.Add(signals_particle_objects[index].GetComponent<ParticleSystem>());
+            particle_systems.Add(signals_particle_objects[index + 1].GetComponent<ParticleSystem>());
+
+            int line_amount = (int)Math.Round(max_lines / 10.0, MidpointRounding.AwayFromZero);
+            if (line_amount <= 0)
+            {
+                line_amount = 1;
+            }
+
+            if (class_normalized_lines)
+            {
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(used_signals[index])
+                , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids);
+            }
+            else
+            {
+                ids = connectivity_go.GetComponent<ConnectionManager>().InitBackwardsPassOfLayers(ConvertFloatArrayToDoubleArray(used_signals[index])
+                , line_amount, particle_systems, signals_particle_objects[index].transform, signals_particle_objects[index + 1].transform, ids, scales_per_layer[index]);
+            }
+            connection_manager_objects.Add(connectivity_go);
+            class_highlighted_neurons_for_backwards_pass.Insert(0, ids);
+
+            signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
+
+
+            highlighted_pos.Add(GetHighlightedPositionsFromBackwardPass(ids, signals_particle_objects[index].GetComponent<ParticleSystem>()));
+
+        }
+        return highlighted_pos;
+    }
+
+    private List<Vector3> GetHighlightedPositionsFromBackwardPass(List<int> ids, ParticleSystem ps)
+    {
+        List<Vector3> results = new List<Vector3>();
+
+        var particles = new ParticleSystem.Particle[ps.particleCount];
+        ps.GetParticles(particles);
+
+        foreach (int id in ids) 
+        {
+            results.Add(particles[id].position);
+        }
+
+        return results;
     }
 
     private void Rebuild_ClassAnalysis_Lines()
@@ -909,16 +1054,16 @@ public class DataManager : MonoBehaviour
     private void SetUsedList(out List<float[][]> list)
     {
 
-        if (current_class_view == class_view_mode.all)
+        if (current_class_view == ClassViewMode.all)
         {
             list = class_average_signals[class_index];
         }
-        else if (current_class_view == class_view_mode.correct)
+        else if (current_class_view == ClassViewMode.correct)
         {
             list = class_correct_average_signals[class_index];
 
         }
-        else if (current_class_view == class_view_mode.incorrect)
+        else if (current_class_view == ClassViewMode.incorrect)
         {
             list = class_incorrect_average_signals[class_index];
         }
@@ -940,7 +1085,69 @@ public class DataManager : MonoBehaviour
         class_average_signals = new List<List<float[][]>>();
 }
 
+    private List<float[][]> CombineClassSignalsForEachNeuronInput(List<List<float[][]>> list)
+    {
+        Debug.Log("Using Input");
+        List<float[][]> result = new List<float[][]>();
+
+        for (int layer_index = 1; layer_index < list[0].Count; layer_index++)
+        {
+            float[][] signals = new float[list[0][layer_index].Length][];
+
+            for (int neuron_index = 0; neuron_index < list[0][layer_index].Length; neuron_index++)
+            {
+                int nbr_of_sigs_per_neuron_input = list[0][layer_index - 1].Length;
+                float[] neuron_sigs = new float[(nbr_of_sigs_per_neuron_input * list.Count)];
+                for (int class_index = 0; class_index < list.Count; class_index++)
+                {
+                    for (int index = 0; index < nbr_of_sigs_per_neuron_input; index++)
+                    {
+                        int full_index = nbr_of_sigs_per_neuron_input * class_index + index;
+                        neuron_sigs[full_index] = list[class_index][layer_index - 1][index][neuron_index];
+                    }
+                }
+                signals[neuron_index] = neuron_sigs;
+            }
+            result.Add(signals);
+        }
+
+        return result;
+    }
+
     private List<float[][]> CombineClassSignalsForEachNeuronOutput(List<List<float[][]>> list)
+    {
+        Debug.Log("Using Output");
+        List<float[][]> result = new List<float[][]>();
+
+        for (int layer_index = 1; layer_index < list[0].Count; layer_index++)
+        {
+            float[][] signals = new float[list[0][layer_index].Length][];
+
+            for (int neuron_index = 0; neuron_index < list[0][layer_index].Length; neuron_index++)
+            {
+                int nbr_of_sigs_per_neuron = list[0][layer_index][0].Length;
+                float[] neuron_sigs = new float[(nbr_of_sigs_per_neuron * list.Count)];
+                for (int class_index = 0; class_index < list.Count; class_index++)
+                {
+                    for (int index = 0; index < list[class_index][layer_index][neuron_index].Length; index++)
+                    {
+                        int full_index = nbr_of_sigs_per_neuron * class_index + index;
+                        neuron_sigs[full_index] = list[class_index][layer_index][neuron_index][index];
+                    }
+                }
+                signals[neuron_index] = neuron_sigs;
+            }
+            result.Add(signals);
+        }
+
+        return result;
+    }
+
+    /*
+     * Processes a nested list of float[][] arrays, combines signals from different classes for each neuron, and returns the combined signals organized by layers and neurons.
+     * Structure of the input list ist Classes<Layers<signals[][]>>
+     * */
+    private List<float[][]> CombineClassSignalsForEachNeuronInputOutput(List<List<float[][]>> list)
     {
         List<float[][]> result = new List<float[][]>();
 
@@ -950,14 +1157,23 @@ public class DataManager : MonoBehaviour
             
             for (int neuron_index = 0; neuron_index < list[0][layer_index].Length; neuron_index++)
             {
-                int nbr_of_sigs_per_neuron = list[0][layer_index][0].Length;
-                float[] neuron_sigs = new float[(nbr_of_sigs_per_neuron * list.Count)];
+                int nbr_of_sigs_per_neuron_input = list[0][layer_index - 1].Length;
+                int nbr_of_sigs_per_neuron_output = list[0][layer_index][0].Length;
+                // Size is (amount of input neurons + output neuron connected to the neuron) * amount of classes
+                float[] neuron_sigs = new float[(nbr_of_sigs_per_neuron_input + nbr_of_sigs_per_neuron_output) * list.Count];
                 for(int class_index = 0; class_index < list.Count; class_index++)
                 {
-                    for (int index=0; index < list[class_index][layer_index][neuron_index].Length; index++)
+                    int full_index;
+                    for (int index_input_neuron = 0; index_input_neuron < nbr_of_sigs_per_neuron_input; index_input_neuron++)
                     {
-                        int full_index = nbr_of_sigs_per_neuron * class_index + index;
-                        neuron_sigs[full_index] = list[class_index][layer_index][neuron_index][index];
+                        full_index = (nbr_of_sigs_per_neuron_input + nbr_of_sigs_per_neuron_output) * class_index + index_input_neuron;
+                        neuron_sigs[full_index] = list[class_index][layer_index-1][index_input_neuron][neuron_index];
+                    }
+
+                    for (int index_output_neuron=0; index_output_neuron < nbr_of_sigs_per_neuron_output; index_output_neuron++)
+                    {
+                        full_index = (nbr_of_sigs_per_neuron_input + nbr_of_sigs_per_neuron_output) * class_index + nbr_of_sigs_per_neuron_input + index_output_neuron;
+                        neuron_sigs[full_index] = list[class_index][layer_index][neuron_index][index_output_neuron];
                     }
                 }
                 signals[neuron_index] = neuron_sigs;
@@ -1037,5 +1253,74 @@ public class DataManager : MonoBehaviour
         }
 
         return result;
+    }
+
+    private bool DoPrecalculationsForModelExist(string model_name)
+    {
+        if (!Directory.Exists("Assets/Precalculations/" + model_name)) return false;
+        if (!File.Exists("Assets/Precalculations/" + model_name + "/embeddings.json")) return false;
+        if (!File.Exists("Assets/Precalculations/" + model_name + "/cluster_trees.json")) return false;
+
+        return true;
+    }
+
+    private void SaveEmbeddings(string model_name, List<float[][]> embeddings)
+    {
+
+        string file_path = "Assets/Precalculations/" + model_name + "/embeddings.json"; 
+        string json = JsonConvert.SerializeObject(embeddings); // Serialize data to JSON
+        File.WriteAllText(file_path, json); // Write the JSON data to the file
+        Debug.Log("Saved Embeddings as JSON");
+        /*string file_path = "Assets/Precalculations/" + model_name + "/embeddings.bat";
+        BinaryFormatter bf = new BinaryFormatter();
+        FileStream file = File.Create(file_path);
+        bf.Serialize(file, embeddings);
+        Debug.Log("Saved Embeddings");*/
+
+
+    }
+
+    private List<float[][]> LoadEmbeddings(string model_name)
+    {
+        string file_path = "Assets/Precalculations/" + model_name + "/embeddings.json"; 
+        string json = File.ReadAllText(file_path); // Read the entire JSON content from the file
+        List<float[][]> embeddings = JsonConvert.DeserializeObject<List<float[][]>>(json); // Deserialize the JSON data
+        Debug.Log("Loaded Embeddings from JSON");
+        return embeddings;
+        /*string file_path = "Assets/Precalculations/" + model_name + "/embeddings.bat";
+        BinaryFormatter bf = new BinaryFormatter();
+        FileStream file = File.Open(file_path, FileMode.Open);
+        List<float[][]> embeddings = (List<float[][]>)bf.Deserialize(file);
+        Debug.Log("Loaded Embeddings");
+        return embeddings;*/
+    }
+
+    private void SaveClusterTrees(string model_name, List<ClusterTree> cluster_tree_list)
+    {
+        string file_path = "Assets/Precalculations/" + model_name + "/cluster_trees.json"; 
+        string json = JsonConvert.SerializeObject(cluster_tree_list); // Serialize  data to JSON
+        File.WriteAllText(file_path, json); // Write the JSON data to the file
+        Debug.Log("Saved ClusterTree as JSON");
+        /*string file_path = "Assets/Precalculations/" + model_name + "/cluster_trees.bat";
+        BinaryFormatter bf = new BinaryFormatter();
+        FileStream file = File.Create(file_path);
+        bf.Serialize(file, cluster_tree_list);
+        Debug.Log("Saved Cluster Trees");*/
+    }
+
+    public List<ClusterTree> LoadClusterTrees(string model_name)
+    {
+        string file_path = "Assets/Precalculations/" + model_name + "/cluster_trees.json";
+        string json = File.ReadAllText(file_path); // Read the entire JSON content from the file
+        List<ClusterTree> cts = JsonConvert.DeserializeObject<List<ClusterTree>>(json); // Deserialize the JSON data
+        Debug.Log("Loaded Embeddings from JSON");
+        return cts;
+        /*string file_path = "Assets/Precalculations/" + model_name + "/cluster_trees.bat";
+        BinaryFormatter bf = new BinaryFormatter();
+        FileStream file = File.Open(file_path, FileMode.Open);
+        List<ClusterTree> cluster_tree_list = (List<ClusterTree>)bf.Deserialize(file);
+        file.Close();
+        Debug.Log("Loaded ClusterTrees");
+        return cluster_tree_list;*/
     }
 }
