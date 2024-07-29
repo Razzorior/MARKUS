@@ -22,8 +22,9 @@ public class DataManager : MonoBehaviour
     // Stuff for experiments
     public bool experiment_running = false;
     public Action<List<float[][]>> experiment_function;
-    public Action<List<List<Vector3>>> experiment_function2;
+    public Action<List<List<List<Vector3>>>> experiment_function2;
     public UMAPData data_source_for_umap;
+    public int amount_of_random_neuron_selection = 100;
 
     // TODO: Write dynamic script. So far this is hard coded for MNIST
    [Range(1, 100)]
@@ -78,8 +79,8 @@ public class DataManager : MonoBehaviour
 
     public enum UMAPData
     {
-        input,
         output,
+        input,
         input_and_output,
         subset_activations
     }
@@ -726,7 +727,7 @@ public class DataManager : MonoBehaviour
 
         if (experiment_running == true)
         {
-            List<List<Vector3>> posistions_of_highlighted_neurons = BuildBackwardPassLinesExp();
+            List<List<List<Vector3>>> posistions_of_highlighted_neurons = BuildBackwardPassLinesExp();
             experiment_function2(posistions_of_highlighted_neurons);
             return;
         }
@@ -906,7 +907,7 @@ public class DataManager : MonoBehaviour
         }
     }
 
-    private List<List<Vector3>> BuildBackwardPassLinesExp()
+    private List<List<List<Vector3>>> BuildBackwardPassLinesExp()
     {
         List<int> ids = new List<int> { class_index };
         DeleteExistingLines();
@@ -918,7 +919,7 @@ public class DataManager : MonoBehaviour
         signals_particle_objects[used_signals.Count].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(new List<int> { class_index });
         class_highlighted_neurons_for_backwards_pass.Add(new List<int> { class_index });
 
-        List<List<Vector3>> highlighted_pos = new List<List<Vector3>>();
+        List<List<List<Vector3>>> highlighted_pos = new List<List<List<Vector3>>>();
 
         for (int index = used_signals.Count - 1; index >= 0; index--)
         {
@@ -951,9 +952,21 @@ public class DataManager : MonoBehaviour
             signals_particle_objects[index].GetComponent<ParticleManager>().HighlightGivenParticlesAndGreyRest(ids);
 
 
-            highlighted_pos.Add(GetHighlightedPositionsFromBackwardPass(ids, signals_particle_objects[index].GetComponent<ParticleSystem>()));
+            List<List<Vector3>> pos = new List<List<Vector3>>();
+            pos.Add(GetHighlightedPositionsFromBackwardPass(ids, signals_particle_objects[index].GetComponent<ParticleSystem>()));
 
+            List<int> all_ids = new List<int>();
+            for (int index_id_added = 0; index_id_added < used_signals[index].Length; index_id_added++)
+            {
+                all_ids.Add(index_id_added);
+            }
+            pos.Add(GetHighlightedPositionsFromBackwardPass(all_ids, signals_particle_objects[index].GetComponent<ParticleSystem>()));
+
+            highlighted_pos.Add(pos);
         }
+
+        
+
         return highlighted_pos;
     }
 

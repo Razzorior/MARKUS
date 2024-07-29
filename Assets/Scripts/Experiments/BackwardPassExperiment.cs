@@ -96,22 +96,35 @@ public class BackwardspassExperiment : MonoBehaviour
 
     // Callback function that is provided to the Datamaneger and is called as soon as the datamanager recieves
     // the requested data from the python server
-    public void RunExpermients(List<List<Vector3>> positions_of_highlighted_neurons)
+    public void RunExpermients(List<List<List<Vector3>>> positions_of_highlighted_neurons)
     {
         experiment_running = true;
         Experiment exp = new Experiment();
         // Name structure example: two_layer_mlp_net_iteration_0
         exp.Name = Enum.GetName(typeof(UMAPData), current_data_source) + "_iteration_" + current_iteration.ToString();
-        exp.PositionsPerHiddenLayer = ConvertToCoordinates(positions_of_highlighted_neurons);
+        exp.PositionsPerHiddenLayer = ConvertToCoordinates(positions_of_highlighted_neurons[0]);
 
         List<float> distances = new List<float>();
         // Iterate through all layers to calculate total distances between highlighted particles to eachother
-        foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons)
+        foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[0])
         {
             distances.Add(CalculateTotalDistancesToEachother(layer_positions));
         }
 
         exp.TotalDistancesToEachother = distances;
+
+        Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with distance: {distances[0]}");
+
+        distances = new List<float>();
+        foreach (List < Vector3 > layer_positions in positions_of_highlighted_neurons[1])
+        {
+            distances.Add(CalculateTotalDistancesToEachother(layer_positions));
+        }
+
+        exp.TotalDistancesAllToEachother = distances;
+
+        Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with all neurons distance: {distances[0]}");
+
 
         // Done with iteration of model, save the exp to the list, to save it later
         experiments.Add(exp);
@@ -176,7 +189,7 @@ public class BackwardspassExperiment : MonoBehaviour
             }
         }
 
-        return totalDistance;
+        return totalDistance / ((positions.Count * (positions.Count - 1)) / 2);
     }
 
     private List<List<Coordinate>> ConvertToCoordinates(List<List<Vector3>> vectorLists)
@@ -211,6 +224,7 @@ public class BackwardspassExperiment : MonoBehaviour
         public string Name { get; set; }
         public List<List<Coordinate>> PositionsPerHiddenLayer { get; set; }
         public List<float> TotalDistancesToEachother { get; set; }
+        public List<float> TotalDistancesAllToEachother { get; set; }
 
     }
 

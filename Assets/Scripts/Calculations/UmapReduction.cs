@@ -10,7 +10,7 @@ public class UmapReduction
     // TODO: Create Function that returns the positions of neuron IDS? Dictionary? the grid coordinates? The RAW data?
     public float[][] applyUMAP(float[][] weight_matrix, float max_size = float.MaxValue)
     {
-        Umap umap = new Umap();
+        Umap umap = new Umap(distance: Umap.DistanceFunctions.Euclidean);
         int numberOfEpochs = umap.InitializeFit(weight_matrix);
 
         for (int i = 0; i < numberOfEpochs; i++)
@@ -18,12 +18,15 @@ public class UmapReduction
             umap.Step();
         }
 
+        float[][] result = umap.GetEmbedding();
+
+        /*
         float[][] result = Center_at_zero(umap.GetEmbedding());
 
         if (max_size != float.MaxValue)
         {
             result = Limit_size(result, max_size);
-        }
+        }*/
 
         return result;
     }
@@ -54,7 +57,6 @@ public class UmapReduction
         }
 
         return embeddings;
-
     }
 
     // If embedings are larger than the max_size on any side, all values get scaled down

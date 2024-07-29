@@ -15,6 +15,7 @@ public class HelloClient : MonoBehaviour
     public int input_index = 1;
     // Just for Debugging purposes, later just display the Elements of the List directly
     public int model_index = 0;
+    public DataManager.UMAPData umapdata = DataManager.UMAPData.input_and_output;
     public List<String> models_available;
    
     
@@ -114,6 +115,7 @@ public class HelloClient : MonoBehaviour
                 break;
             case HelloRequester.task.send_class_analysis_data:
                 _helloRequester.int_param_1 = input_index;
+                _helloRequester.umapdata = umapdata;
                 break;
             case HelloRequester.task.load_and_send_input_and_ig:
                 _helloRequester.string_param_1 = input_train_or_test;
@@ -130,6 +132,7 @@ public class HelloClient : MonoBehaviour
                 // TODO: Add Check if the model_index is out of bounds
                 _helloRequester.string_param_1 = models_available[model_index];
                 _helloRequester.int_param_1 = input_index;
+                _helloRequester.umapdata = umapdata;
                 break;
         }
     }

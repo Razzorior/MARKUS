@@ -39,6 +39,7 @@ public class HelloRequester : RunAbleThread
     public task task_to_do = task.nothing;
     public String string_param_1 = null;
     public int int_param_1;
+    public DataManager.UMAPData umapdata;
     public DataManager dataManager = null;
     public List<String> messages = null;
 
@@ -427,23 +428,41 @@ public class HelloRequester : RunAbleThread
     private void SendClassAverageActivations(RequestSocket client, bool create_list = true)
     {
         client.SendFrame("send_class_average_activations");
-        string response = null;
+
+        string affirmation = "";
         bool success = false;
 
         while (Running)
         {
-            success = client.TryReceiveFrameString(out response);
-
+            success = client.TryReceiveFrameString(out affirmation);
             if (success) break;
         }
 
+        Debug.Log(affirmation);
+
+        List<string> message = new List<string>();
+
+        client.SendFrame(((int)umapdata).ToString());
+
+
+        while (Running)
+        {
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(60), ref message);
+            if (success) break;
+        }
+
+        Debug.Log("Received " + message.Count + " messages.");
+
         if (create_list)
         {
-            messages = new List<String> { response };
+            messages = message;
         }
         else
         {
-            messages.Add(response);
+            foreach (string mes in message)
+            {
+                messages.Add(mes);
+            }
         }
 
     }
