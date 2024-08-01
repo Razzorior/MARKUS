@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using UnityEngine.Assertions.Must;
 using static DataManager;
 using System;
+using Unity.VisualScripting;
 
 public class BackwardspassExperiment : MonoBehaviour
 {
@@ -17,7 +18,7 @@ public class BackwardspassExperiment : MonoBehaviour
     private DataManager dm;
 
     private List<string> model_names_to_load = new List<string>() { "two_layer_mlp_net", "two_layer_mlp_underfitted", "two_layer_mlp_untrained" };
-    private int iteration_amounts = 10;
+    private int iteration_amounts = 20;
     private int current_model_index = 0;
     private int current_iteration = 0;
 
@@ -87,6 +88,7 @@ public class BackwardspassExperiment : MonoBehaviour
         dm.data_source_for_umap = current_data_source;
 
         hc.model_index = model_index_to_load;
+        hc.umapdata = current_data_source;
         hc.debug_trigger_task = true;
 
         // Turn this off, so that the request won't be called in every update Frame
@@ -99,35 +101,45 @@ public class BackwardspassExperiment : MonoBehaviour
     public void RunExpermients(List<List<List<Vector3>>> positions_of_highlighted_neurons)
     {
         experiment_running = true;
-        Experiment exp = new Experiment();
-        // Name structure example: two_layer_mlp_net_iteration_0
-        exp.Name = Enum.GetName(typeof(UMAPData), current_data_source) + "_iteration_" + current_iteration.ToString();
-        exp.PositionsPerHiddenLayer = ConvertToCoordinates(positions_of_highlighted_neurons[0]);
+        
 
-        List<float> distances = new List<float>();
-        // Iterate through all layers to calculate total distances between highlighted particles to eachother
-        foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[0])
+        for (int index = 0; index < 10; index++)
         {
-            distances.Add(CalculateTotalDistancesToEachother(layer_positions));
+            Experiment exp = new Experiment();
+            // Name structure example: two_layer_mlp_net_iteration_0
+            exp.Name = Enum.GetName(typeof(UMAPData), current_data_source);
+            exp.PositionsPerHiddenLayer = ConvertToCoordinates(positions_of_highlighted_neurons[index]);
+            exp.Iteration = current_iteration;
+            exp.Class = index;
+
+            List<float> distances = new List<float>();
+            // Iterate through all layers to calculate total distances between highlighted particles to eachother
+            foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[index])
+            {
+                distances.Add(CalculateTotalDistancesToEachother(layer_positions));
+            }
+
+            exp.TotalDistancesToEachother = distances;
+
+            distances = new List<float>();
+            foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[10])
+            {
+                distances.Add(CalculateTotalDistancesToEachother(layer_positions));
+            }
+
+            exp.TotalDistancesAllToEachother = distances;
+            experiments.Add(exp);
         }
+        
 
-        exp.TotalDistancesToEachother = distances;
+        //Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with distance: {distances[0]}");
 
-        Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with distance: {distances[0]}");
+        
 
-        distances = new List<float>();
-        foreach (List < Vector3 > layer_positions in positions_of_highlighted_neurons[1])
-        {
-            distances.Add(CalculateTotalDistancesToEachother(layer_positions));
-        }
-
-        exp.TotalDistancesAllToEachother = distances;
-
-        Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with all neurons distance: {distances[0]}");
+        //Debug.Log($"{Enum.GetName(typeof(UMAPData), current_data_source)} run with all neurons distance: {distances[0]}");
 
 
         // Done with iteration of model, save the exp to the list, to save it later
-        experiments.Add(exp);
 
         Debug.Log($"Done with {Enum.GetName(typeof(UMAPData), current_data_source)}'s iteration nbr. " + current_iteration.ToString());
 
@@ -159,7 +171,7 @@ public class BackwardspassExperiment : MonoBehaviour
         Debug.Log("Done with calculations. Saving the Experiment to .json.");
         
 
-        string filePath = "Assets/Experiments/BackwardsPassExperimentDataSource.json";
+        string filePath = "Assets/Experiments/BackwardsPassExperimentDataSourceFinal.json";
         string jsonData = JsonConvert.SerializeObject(experiments, Formatting.Indented);
 
         // Write the JSON data to the file
@@ -222,6 +234,8 @@ public class BackwardspassExperiment : MonoBehaviour
     class Experiment
     {
         public string Name { get; set; }
+        public int Iteration { get; set; }
+        public int Class { get; set; }
         public List<List<Coordinate>> PositionsPerHiddenLayer { get; set; }
         public List<float> TotalDistancesToEachother { get; set; }
         public List<float> TotalDistancesAllToEachother { get; set; }

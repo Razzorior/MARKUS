@@ -428,7 +428,44 @@ public class HelloRequester : RunAbleThread
     private void SendClassAverageActivations(RequestSocket client, bool create_list = true)
     {
         client.SendFrame("send_class_average_activations");
+        bool success = false;
+        string response = null;
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out response);
 
+            if (success) break;
+        }
+
+        if (create_list)
+        {
+            messages = new List<String> { response };
+        }
+        else
+        {
+            messages.Add(response);
+        }
+    }
+
+    private void SendAverageSignals(RequestSocket client)
+    {
+        client.SendFrame("send_average_signals");
+        List<String> message = new List<string>();
+        bool success = false;
+
+        while (Running)
+        {
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
+
+            if (success) break;
+
+        }
+        messages = message;
+    }
+
+    private void SendClassAverageSignals(RequestSocket client, bool create_list = true)
+    {
+        client.SendFrame("send_class_average_signals");
         string affirmation = "";
         bool success = false;
 
@@ -463,46 +500,6 @@ public class HelloRequester : RunAbleThread
             {
                 messages.Add(mes);
             }
-        }
-
-    }
-
-    private void SendAverageSignals(RequestSocket client)
-    {
-        client.SendFrame("send_average_signals");
-        List<String> message = new List<string>();
-        bool success = false;
-
-        while (Running)
-        {
-            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
-
-            if (success) break;
-
-        }
-        messages = message;
-    }
-
-    private void SendClassAverageSignals(RequestSocket client, bool create_list = true)
-    {
-        client.SendFrame("send_class_average_signals");
-        string response = null;
-        bool success = false;
-
-        while (Running)
-        {
-            success = client.TryReceiveFrameString(out response);
-
-            if (success) break;
-        }
-
-        if (create_list)
-        {
-            messages = new List<String> { response };
-        }
-        else
-        {
-            messages.Add(response);
         }
     }
 

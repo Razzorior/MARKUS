@@ -278,12 +278,13 @@ public class HelloClient : MonoBehaviour
         List<List<float[]>> class_acts = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
         List<float[][]> subset_acts = TurnJSONIntoListNestedArray(_helloRequester.messages[1]);
         List<List<float[][]>> class_sigs = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[2]);
-        List<List<float[]>> class_correct_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[3]);
-        List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[4]);
-        List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[5]);
-        List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[6]);
+        List<float[][]> embeddings = TurnJSONIntoListNestedArray(_helloRequester.messages[3]);
+        List<List<float[]>> class_correct_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[4]);
+        List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[5]);
+        List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[6]);
+        List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[7]);
 
-        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals);
+        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, embeddings, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals);
     }
 
     private void DealWithWeightDisplay()
@@ -360,7 +361,6 @@ public class HelloClient : MonoBehaviour
             return;
         }
 
-
         List<List<float[]>> class_average_signals = TurnJSONIntoListListFloatArray(_helloRequester.messages[0]);
 
         Debug.Log("Class Count " + class_average_signals.Count);
@@ -424,16 +424,9 @@ public class HelloClient : MonoBehaviour
             return;
         }
 
-        Debug.Log("Recieved a message:");
-        Debug.Log("Message count: " + _helloRequester.messages.Count);
-
         List<List<float[][]>> class_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[0]);
 
-
-        Debug.Log("I guesss it somehow worked, lol?");
-        Debug.Log("Class Count " + class_average_signals.Count);
-        Debug.Log("Layer Count " + class_average_signals[0].Count);
-        Debug.Log("Random Value Check" + class_average_signals[0][0][128][65]);
+        List<float[][]> embeddings = TurnJSONIntoListNestedArray(_helloRequester.messages[1]);
     }
 
     private void DealWithClassPredictionsActivationsAndSigs()
@@ -455,7 +448,6 @@ public class HelloClient : MonoBehaviour
         List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[1]);
         List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[2]);
         List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[3]);
-
     }
 
     // TODO: Turn this Regex mess into actually using Newtonsoft.JSON.. Didn't work initially 
