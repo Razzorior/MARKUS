@@ -6,12 +6,14 @@ using Newtonsoft.Json;
 using System.Collections.Generic;
 using System;
 using UnityEngine.Networking.PlayerConnection;
+using Unity.VisualScripting;
 
 // TODO: Write multiple classes for each task I guess.. Maybe come up with a better solution
 public class HelloRequester : RunAbleThread
 {
     public enum task
     {
+        experimentCluster,
         handshake,
         load_model,
         load_input,
@@ -32,6 +34,7 @@ public class HelloRequester : RunAbleThread
         send_average_signals,
         send_class_predictions_activations_and_sigs,
         send_class_average_signals,
+        send_class_gradient_weighted_signals,
         send_class_analysis_data,
         nothing
     }
@@ -54,6 +57,9 @@ public class HelloRequester : RunAbleThread
             client.Connect("tcp://localhost:5555");
             switch (task_to_do)
             {
+                case task.experimentCluster:
+                    ExperimentCluster(client);
+                    break;
                 case task.handshake:
                     Handshake(client);
                     break;
@@ -102,6 +108,9 @@ public class HelloRequester : RunAbleThread
                 case task.send_class_average_signals:
                     SendClassAverageSignals(client);
                     break;
+                case task.send_class_gradient_weighted_signals:
+                    SendClassGradientWeightedSignals(client);
+                    break;
                 case task.send_class_predictions_activations_and_sigs:
                     SendClassPredictionsActivationsAndSigs(client);
                     break;
@@ -122,7 +131,7 @@ public class HelloRequester : RunAbleThread
 
         while (Running)
         {
-            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(99999), ref message);
             if (success) break;
         }
 
@@ -145,6 +154,23 @@ public class HelloRequester : RunAbleThread
 
             if (gotMessage) Debug.Log("Received " + message);
         }
+    }
+
+    private void ExperimentCluster(RequestSocket client)
+    {
+
+        client.SendFrame("experimentCluster");
+        bool success = false;
+        var message = new List<string>();
+        while (Running)
+        {
+            success = client.TryReceiveMultipartStrings(TimeSpan.FromSeconds(2), ref message);
+            if (success) break;
+        }
+
+        Debug.Log("Received Experiment Data for Clustering Experiment");
+
+        messages = message;
     }
 
     private void Handshake(RequestSocket client)
@@ -261,6 +287,7 @@ public class HelloRequester : RunAbleThread
         SendSubsetActivations(client, false);
         SendClassAverageSignals(client, false);
         SendClassPredictionsActivationsAndSigs(client, false);
+        SendClassGradientWeightedSignals(client, false);
     }
 
     private void TestTensor(RequestSocket client)
@@ -500,6 +527,28 @@ public class HelloRequester : RunAbleThread
             {
                 messages.Add(mes);
             }
+        }
+    }
+
+    private void SendClassGradientWeightedSignals(RequestSocket client, bool create_list = true)
+    {
+        client.SendFrame("send_class_gradient_weighted_signals");
+        bool success = false;
+        string response = null;
+        while (Running)
+        {
+            success = client.TryReceiveFrameString(out response);
+
+            if (success) break;
+        }
+
+        if (create_list)
+        {
+            messages = new List<String> { response };
+        }
+        else
+        {
+            messages.Add(response);
         }
     }
 

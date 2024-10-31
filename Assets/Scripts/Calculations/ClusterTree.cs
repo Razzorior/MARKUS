@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System;
 using System.Linq;
 using Newtonsoft.Json;
+using static ClusterTree;
 
 [Serializable]
 public class ClusterTree
@@ -11,9 +12,18 @@ public class ClusterTree
     [SerializeField] public Node root = null;
     [SerializeField] public int max_size;
 
-    public ClusterTree(double[] attribute)
+    private DistFunction used_dist_function;
+
+    public enum DistFunction
+    {
+        Manhattan,
+        Euclidean
+    }
+
+    public ClusterTree(double[] attribute, DistFunction df = DistFunction.Manhattan)
     {
         max_size = attribute.Length;
+        used_dist_function = df;
 
         for (int index = 0; index < max_size; index++)
         {
@@ -23,9 +33,10 @@ public class ClusterTree
         CreateTree(attribute);
     }
 
-    public ClusterTree(double[,] attribute)
+    public ClusterTree(double[,] attribute, DistFunction df = DistFunction.Manhattan)
     {
         max_size = attribute.GetLength(0);
+        used_dist_function = df;
 
         for (int index = 0; index < max_size; index++)
         {
@@ -94,7 +105,7 @@ public class ClusterTree
         // Add initial leaves
         for (int index = 0; index < values.Length; index++)
         {
-            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, false));
+            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, false, used_dist_function));
         }
 
 
@@ -117,7 +128,7 @@ public class ClusterTree
         // Add initial leaves
         for (int index = 0; index < values.GetLength(0); index++)
         {
-            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, true));
+            active_clusters.Add(new Node(dict, new List<Node>(0), new List<int> { index }, 0.0, true, used_dist_function));
         }
 
         //Debug.Log("Initial Leaves Count: " + active_clusters.Count);
@@ -214,7 +225,7 @@ public class ClusterTree
 
         // Add new merged cluster to list and remove it's old individual clusters from list
         List<int> merged_neuron_ids = active_clusters[index1].neuron_ids.Concat(active_clusters[index2].neuron_ids).ToList();
-        Node new_cluster = new (dict, new List<Node> { active_clusters[index1], active_clusters[index2] }, merged_neuron_ids, distance / 2.0, active_clusters[index1].is_array);
+        Node new_cluster = new (dict, new List<Node> { active_clusters[index1], active_clusters[index2] }, merged_neuron_ids, distance / 2.0, active_clusters[index1].is_array, used_dist_function);
         //Debug.Log(active_clusters[index1]);
         //Debug.Log(active_clusters[index2]);
         active_clusters.Add(new_cluster);
@@ -295,6 +306,8 @@ public class Node
     [SerializeField] public double length { get; set; }
     [JsonIgnore] public double average_single { get; set; }
     [JsonIgnore] public double[] average_array { get; set; }
+    [JsonIgnore] ClusterTree.DistFunction df { get; set; }
+
 
 
     [JsonConstructor]
@@ -306,13 +319,14 @@ public class Node
         this.length = _length;
     }
 
-    public Node(Dictionary<int, ValueContainer> dict, List<Node> _child, List<int> _neuron_ids, double _length, bool _is_array)
+    public Node(Dictionary<int, ValueContainer> dict, List<Node> _child, List<int> _neuron_ids, double _length, bool _is_array, ClusterTree.DistFunction _df)
     {
 
         children = _child;
         neuron_ids = _neuron_ids;
         length = _length;
         is_array = _is_array;
+        df = _df;
 
         if (is_array)
         {
@@ -387,6 +401,36 @@ public class Node
         }
     }
 
+
+    public double Distance(Node other_node)
+    {
+        if (is_array)
+        {
+            switch (df)
+            {
+                case DistFunction.Manhattan:
+                    return average_array.Zip(other_node.average_array, (x, y) => Math.Abs(x - y)).Sum();
+                case DistFunction.Euclidean:
+                    return Math.Sqrt(average_array.Zip(other_node.average_array, (x, y) => Math.Pow(x - y, 2)).Sum());
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(df), df, null);
+            }
+        }
+        else
+        {
+            switch (df)
+            {
+                case DistFunction.Manhattan:
+                    return Math.Abs(average_single - other_node.average_single);
+                case DistFunction.Euclidean:
+                    return Math.Sqrt(Math.Pow(average_single - other_node.average_single, 2));
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(df), df, null);
+            }
+        }
+    }
+
+    /*
     public double Distance(Node other_node)
     {
         if (is_array)
@@ -395,9 +439,10 @@ public class Node
         }
         else
         {
-            return Math.Abs(average_single - other_node.average_single);
+            return Math.Abs(average_single - other_node.average_single);   
         }
     }
+    */
 }
 
 [Serializable]

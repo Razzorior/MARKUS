@@ -142,6 +142,7 @@ public class HelloClient : MonoBehaviour
     {
         var taskActions = new Dictionary<HelloRequester.task, Action>
         {
+            { HelloRequester.task.experimentCluster, DealWithExperimentCluster }, 
             { HelloRequester.task.handshake, DealWithHandshake },
             { HelloRequester.task.load_model, DealWithModelLoaded },
             { HelloRequester.task.load_and_send_input_and_activations, DealWithInputLoadingAndActivationDisplay },
@@ -166,6 +167,26 @@ public class HelloClient : MonoBehaviour
         {
             Debug.LogError($"Task {_helloRequester.task_to_do} not found!");
         }
+    }
+
+    private void DealWithExperimentCluster()
+    {
+        if (_helloRequester.messages is null)
+        {
+            Debug.LogError("ERROR: Loading Cluster Experiments Data failed!");
+            return;
+        }
+
+        Debug.Log("We made it here. Why when how?");
+        List<List<float[][]>> embeddings = new List<List<float[][]>>();
+        for (int i = 0; i < _helloRequester.messages.Count - 1; i++)
+        {
+            embeddings.Add(TurnJSONIntoListNestedArray(_helloRequester.messages[i]));
+        }
+
+        List<float[][]> subset_acts = TurnJSONIntoListNestedArray(_helloRequester.messages[_helloRequester.messages.Count-1]);
+
+        usedDataManager.StartExperimentCluster(embeddings, subset_acts);
     }
 
     private void DealWithHandshake()
@@ -283,8 +304,9 @@ public class HelloClient : MonoBehaviour
         List<List<float[]>> class_incorrect_average_activations = TurnJSONIntoListListFloatArray(_helloRequester.messages[5]);
         List<List<float[][]>> class_correct_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[6]);
         List<List<float[][]>> class_incorrect_average_signals = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[7]);
+        List<List<float[][]>> class_sigs_gradient_weighted = TurnJSONIntoListListNestedFloatArray(_helloRequester.messages[8]);
 
-        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, embeddings, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals);
+        usedDataManager.InitFullAnalysisOfClass(class_acts, subset_acts, class_sigs, embeddings, class_correct_average_activations, class_incorrect_average_activations, class_correct_average_signals, class_incorrect_average_signals, class_sigs_gradient_weighted);
     }
 
     private void DealWithWeightDisplay()

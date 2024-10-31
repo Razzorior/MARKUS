@@ -137,8 +137,8 @@ public class ConnectionManager : MonoBehaviour
             // Add LineRenderer Component to display weight connectivty
             LineRenderer lr = new_line.AddComponent<LineRenderer>();
             // TODO: Shift values to extern public value, so that they can be changed from editor / other script
-            lr.startWidth = 0.005f;
-            lr.endWidth = 0.005f;
+            lr.startWidth = 0.015f;
+            lr.endWidth = 0.015f;
 
             // Set position of connection.
             lr.positionCount = 2;
@@ -267,8 +267,8 @@ public class ConnectionManager : MonoBehaviour
             // Add LineRenderer Component to display weight connectivty
             LineRenderer lr = new_line.AddComponent<LineRenderer>();
             // TODO: Shift values to extern public value, so that they can be changed from editor / other script
-            lr.startWidth = 0.005f;
-            lr.endWidth = 0.005f;
+            lr.startWidth = 0.015f;
+            lr.endWidth = 0.015f;
 
             // Set position of connection.
             lr.positionCount = 2;

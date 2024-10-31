@@ -19,8 +19,9 @@ public class BackwardspassExperiment : MonoBehaviour
 
     private List<string> model_names_to_load = new List<string>() { "two_layer_mlp_net", "two_layer_mlp_underfitted", "two_layer_mlp_untrained" };
     private int iteration_amounts = 20;
-    private int current_model_index = 0;
+    private int current_model_index = 2;
     private int current_iteration = 0;
+    private bool gradient_weighted_backwards_pass = false;
 
     private DataManager.UMAPData current_data_source = 0;
 
@@ -86,10 +87,14 @@ public class BackwardspassExperiment : MonoBehaviour
         }
 
         dm.data_source_for_umap = current_data_source;
+        // Gradient weighted EXP
+        if (gradient_weighted_backwards_pass)
+            dm.current_class_view = ClassViewMode.gradient_weighted;
 
         hc.model_index = model_index_to_load;
         hc.umapdata = current_data_source;
         hc.debug_trigger_task = true;
+        
 
         // Turn this off, so that the request won't be called in every update Frame
         if (experiment_running)
@@ -105,30 +110,22 @@ public class BackwardspassExperiment : MonoBehaviour
 
         for (int index = 0; index < 10; index++)
         {
-            Experiment exp = new Experiment();
-            // Name structure example: two_layer_mlp_net_iteration_0
-            exp.Name = Enum.GetName(typeof(UMAPData), current_data_source);
-            exp.PositionsPerHiddenLayer = ConvertToCoordinates(positions_of_highlighted_neurons[index]);
-            exp.Iteration = current_iteration;
-            exp.Class = index;
 
-            List<float> distances = new List<float>();
-            // Iterate through all layers to calculate total distances between highlighted particles to eachother
-            foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[index])
+            int layer_name = 0;
+            for (int layer_index = positions_of_highlighted_neurons[index].Count - 1; layer_index >= 0; layer_index-- )
             {
-                distances.Add(CalculateTotalDistancesToEachother(layer_positions));
+                Experiment exp = new Experiment();
+                // Name structure example: two_layer_mlp_net_iteration_0
+                exp.Name = Enum.GetName(typeof(UMAPData), current_data_source);
+                exp.Iteration = current_iteration;
+                exp.Class = index;
+                exp.Layer = layer_name;
+                exp.TotalDistancesToEachother = CalculateTotalDistancesToEachother(positions_of_highlighted_neurons[index][layer_index]);
+                exp.TotalDistancesAllNeuronsToEachother = CalculateTotalDistancesToEachother(positions_of_highlighted_neurons[10][layer_index]);
+                experiments.Add(exp);
+
+                layer_name++;
             }
-
-            exp.TotalDistancesToEachother = distances;
-
-            distances = new List<float>();
-            foreach (List<Vector3> layer_positions in positions_of_highlighted_neurons[10])
-            {
-                distances.Add(CalculateTotalDistancesToEachother(layer_positions));
-            }
-
-            exp.TotalDistancesAllToEachother = distances;
-            experiments.Add(exp);
         }
         
 
@@ -171,7 +168,7 @@ public class BackwardspassExperiment : MonoBehaviour
         Debug.Log("Done with calculations. Saving the Experiment to .json.");
         
 
-        string filePath = "Assets/Experiments/BackwardsPassExperimentDataSourceFinal.json";
+        string filePath = "Assets/Experiments/BPEXPUntrainedModelNotGradientWeighted.json";
         string jsonData = JsonConvert.SerializeObject(experiments, Formatting.Indented);
 
         // Write the JSON data to the file
@@ -201,7 +198,7 @@ public class BackwardspassExperiment : MonoBehaviour
             }
         }
 
-        return totalDistance / ((positions.Count * (positions.Count - 1)) / 2);
+        return (totalDistance / ((positions.Count * (positions.Count - 1)) / 2));
     }
 
     private List<List<Coordinate>> ConvertToCoordinates(List<List<Vector3>> vectorLists)
@@ -236,9 +233,9 @@ public class BackwardspassExperiment : MonoBehaviour
         public string Name { get; set; }
         public int Iteration { get; set; }
         public int Class { get; set; }
-        public List<List<Coordinate>> PositionsPerHiddenLayer { get; set; }
-        public List<float> TotalDistancesToEachother { get; set; }
-        public List<float> TotalDistancesAllToEachother { get; set; }
+        public int Layer { get; set; }
+        public float TotalDistancesToEachother { get; set; }
+        public float TotalDistancesAllNeuronsToEachother { get; set; }
 
     }
 

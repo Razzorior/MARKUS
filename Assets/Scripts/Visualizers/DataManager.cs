@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using UnityEngine;
 using System;
 using System.Linq;
-using CielaSpike;
 using System.IO;
 using Newtonsoft.Json;
 using UnityEngine.Rendering;
@@ -22,7 +21,7 @@ public class DataManager : MonoBehaviour
     private string model_loaded = "none";
     // Stuff for experiments
     public bool experiment_running = false;
-    public Action<List<float[][]>> experiment_function;
+    public Action<List<List<float[][]>>, List<float[][]>> experiment_function;
     public Action<List<List<List<Vector3>>>> experiment_function2;
     public UMAPData data_source_for_umap;
     public int amount_of_random_neuron_selection = 100;
@@ -34,7 +33,6 @@ public class DataManager : MonoBehaviour
     private bool clustering_and_umap_done = false;
     private List<ClusterTree> hidden_layer_CTs = new List<ClusterTree>();
     private List<float[][]> hidden_layer_embeddings = new List<float[][]>();
-
     private List<double[,]> naps = null;
     private List<GameObject> particle_objects = new List<GameObject>();
     private List<GameObject> input_particle_objects = new List<GameObject>();
@@ -70,12 +68,14 @@ public class DataManager : MonoBehaviour
     private List<List<float[]>> class_incorrect_average_activations;
     private List<List<float[][]>> class_correct_average_signals;
     private List<List<float[][]>> class_incorrect_average_signals;
+    private List<List<float[][]>> class_gradient_weighted_signals;
 
     public enum ClassViewMode
     {
         all,
         correct,
-        incorrect
+        incorrect,
+        gradient_weighted,
     }
 
     public enum UMAPData
@@ -88,6 +88,9 @@ public class DataManager : MonoBehaviour
         subset_signals_input,
         subset_signals_input_and_output,
         subset_activations,
+        gradient_weighted_output,
+        gradient_weighted_input,
+        gradient_weighted_input_and_output,
     }
 
     // Start is called before the first frame update
@@ -485,11 +488,6 @@ public class DataManager : MonoBehaviour
 
     public void InitUmapLayout(List<float[][]> data_array, bool is_signals = false)
     {
-        if (experiment_running == true)
-        {
-            experiment_function(data_array);
-            return;
-        }
 
         UmapReduction umap = new UmapReduction();
         // Amount of layers, excluding the output layer.
@@ -646,8 +644,11 @@ public class DataManager : MonoBehaviour
                     UMAPData.subset_signals_output => CombineClassSignalsForEachNeuronInputOutput(_class_average_signals),
                     UMAPData.subset_signals_input => CombineClassSignalsForEachNeuronInputOutput(_class_average_signals),
                     UMAPData.subset_signals_input_and_output => CombineClassSignalsForEachNeuronInputOutput(_class_average_signals),
+                    UMAPData.gradient_weighted_output => class_gradient_weighted_signals[class_index],
+                    UMAPData.gradient_weighted_input => class_gradient_weighted_signals[class_index],
+                    UMAPData.gradient_weighted_input_and_output => class_gradient_weighted_signals[class_index],
                     _ => throw new NotImplementedException()
-                };
+                } ;
             }
             else
             {
@@ -669,7 +670,7 @@ public class DataManager : MonoBehaviour
 
         for (int index = 1; index < _activations.Count - 1; index++)
         {
-            if (!existing_precalculations || experiment_running)
+            if (!existing_precalculations && !experiment_running)
             {
                     hidden_layer_CTs.Add(new ClusterTree(ConvertFloatArrayToDoubleArray(combined_sigs[index - 1])));
             }
@@ -835,15 +836,8 @@ public class DataManager : MonoBehaviour
         yield return null;
     }
 
-    IEnumerator _InitUmapLayoutCoroutine(List<float[]> _activations, List<float[][]> _subset_activations, List<float[][]> _signals, List<List<float[][]>> _class_average_signals)
-    {
-        Task task;
-        this.StartCoroutineAsync(InitUmapLayoutCoroutine(_activations, _subset_activations, _signals, _class_average_signals), out task);
-        yield return StartCoroutine(task.Wait());
-        LogState(task);
-    }
 
-    public void InitFullAnalysisOfClass(List<List<float[]>> _class_average_activations, List<float[][]> _subset_activations, List<List<float[][]>> _class_average_signals, List<float[][]> _embeddings, List<List<float[]>> _class_correct_average_activations, List<List<float[]>> _class_incorrect_average_activations, List<List<float[][]>> _class_correct_average_signals, List<List<float[][]>> _class_incorrect_average_signals)
+    public void InitFullAnalysisOfClass(List<List<float[]>> _class_average_activations, List<float[][]> _subset_activations, List<List<float[][]>> _class_average_signals, List<float[][]> _embeddings, List<List<float[]>> _class_correct_average_activations, List<List<float[]>> _class_incorrect_average_activations, List<List<float[][]>> _class_correct_average_signals, List<List<float[][]>> _class_incorrect_average_signals, List<List<float[][]>> _class_gradient_weighted_signals)
     {
         class_average_activations = _class_average_activations;
         class_average_signals = _class_average_signals;
@@ -853,6 +847,7 @@ public class DataManager : MonoBehaviour
         class_incorrect_average_signals = _class_incorrect_average_signals;
         class_analysis_running = true;
         hidden_layer_embeddings = _embeddings;
+        class_gradient_weighted_signals = _class_gradient_weighted_signals;
         InitUmapLayoutWithFullData(class_average_activations[class_index], _subset_activations, class_average_signals[class_index], class_average_signals, _embeddings);
         //StartCoroutine(_InitUmapLayoutCoroutine(class_average_activations[class_index], _subset_activations, class_average_signals[class_index], class_average_signals));
     }
@@ -1103,6 +1098,10 @@ public class DataManager : MonoBehaviour
         {
             list = class_incorrect_average_signals[class_index];
         }
+        else if (current_class_view == ClassViewMode.gradient_weighted)
+        {
+            list = class_gradient_weighted_signals[class_index];
+        }
         else
         {
             list = new List<float[][]>();
@@ -1119,7 +1118,12 @@ public class DataManager : MonoBehaviour
         class_analysis_running = false;
         class_average_activations = new List<List<float[]>>();
         class_average_signals = new List<List<float[][]>>();
-}
+    }
+
+    public void StartExperimentCluster(List<List<float[][]>> embeddings, List<float[][]> subset_activations)
+    {
+        experiment_function(embeddings, subset_activations);
+    }
 
     private List<float[][]> CombineClassSignalsForEachNeuronInput(List<List<float[][]>> list)
     {
@@ -1249,11 +1253,6 @@ public class DataManager : MonoBehaviour
         }
 
         return doubleArray;
-    }
-
-    private void LogState(Task task)
-    {
-        Debug.Log("[State]" + task.State);
     }
 
     public List<(double min, double max)> FindMinMax(List<List<float[][]>> my_list)

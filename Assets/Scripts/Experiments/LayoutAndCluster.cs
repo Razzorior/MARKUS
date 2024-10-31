@@ -4,6 +4,7 @@ using System.Linq;
 using UnityEngine;
 using System.IO;
 using Newtonsoft.Json;
+using static ClusterTree;
 
 public class LayoutAndCluster : MonoBehaviour
 {
@@ -58,127 +59,76 @@ public class LayoutAndCluster : MonoBehaviour
     {
         dm.experiment_running = true;
         dm.experiment_function = RunExpermients;
-        hc.new_task = HelloRequester.task.send_subset_activations;
+        hc.new_task = HelloRequester.task.experimentCluster;
         hc.debug_trigger_task = true;
 
     }
 
     // Callback function that is provided to the Datamaneger and is called as soon as the datamanager recieves
     // the requested data from the python server
-    public void RunExpermients(List<float[][]> data)
+    public void RunExpermients(List<List<float[][]>> embeddings,  List<float[][]> subset_activations)
     {
-        Debug.Log("Recieved the data from the datamanager, could run experiments now");
+        Debug.Log("Recieved the data from the datamanager, starting clustering experiments now");
         
         experiment_running = false;
         dm.experiment_running = false;
 
-        MultipleUMAPRuns(data);
+        MultipleUMAPRuns(embeddings, subset_activations);
         return;
-
-        Experiment exp = new Experiment();
-        exp.Name = "Experiment_test";
-
-        // Clustering on Umap (best case) 
-        UmapReduction umap = new UmapReduction();
-        Debug.Log("Experiment: Calculating UMAP Layout");
-        float[][] embeddings = umap.applyUMAP(data[1], 1.4f);
-
-        Debug.Log("Experiment: Creating cluster Tree on UMAP embeddings");
-        ClusterTree ct_umap = new ClusterTree(ConvertFloatArrayToDoubleArray(embeddings));
-        (List<double> distances, double total_dist) = TotalDistanceForClustering(ct_umap, embeddings);
-        exp.UMAPDistances = distances;
-        exp.TotalUMAPDistance = total_dist;
-        Debug.Log(total_dist.ToString());
-
-        // Clustering on Real Data
-        Debug.Log("Experiment: Creating cluster Tree on real data");
-        ClusterTree ct_real = new ClusterTree(ConvertFloatArrayToDoubleArray(data[1]));
-        (List<double> distances2, double total_dist2) = TotalDistanceForClustering(ct_real, embeddings);
-        exp.RealDistances = distances2;
-        exp.TotalRealDistance = total_dist2;
-        Debug.Log(total_dist2.ToString());
-
-        // Clustering on Random Data multiple times and average (should be worst case)
-        List<List<double>> random_distances = new List<List<double>>();
-        List<double> random_average_distance = new List<double>();
-        Debug.Log("Experiment: Creating cluster Tree on random data");
-        for (int index = 0; index < 10; index++)
-        {
-            Debug.Log("Starting with random run " + index.ToString());
-            float[][] random_data = GenerateRandomArray(data[1].Length, data[1][0].Length);
-            ClusterTree ct_random = new ClusterTree(ConvertFloatArrayToDoubleArray(random_data));
-            (List<double> distances3, double total_dist3) = TotalDistanceForClustering(ct_random, embeddings);
-            random_distances.Add(distances3);
-            random_average_distance.Add(total_dist3);
-            Debug.Log(total_dist3.ToString());
-        }
-
-        exp.RandomDistances = random_distances;
-        exp.TotalRandomDistance = random_average_distance;
-
-        string filePath = "Assets/Experiments/experiment.json";
-
-        string jsonData = JsonConvert.SerializeObject(exp, Formatting.Indented);
-
-        // Write the JSON data to the file
-        File.WriteAllText(filePath, jsonData);
-
-
     }
 
-    private void MultipleUMAPRuns(List<float[][]> data)
+    private void MultipleUMAPRuns(List<List<float[][]>> embeddings, List<float[][]> subset_activations)
     {
         // Need to randomise the random arrays once for all umap runs, so that they are comparable to eachother
 
         List<Experiment> umap_runs = new List<Experiment>();
 
-        for (int run = 1; run <= 10; run++)
+        int run_number = 1;
+        foreach (List<float[][]> coordinates in embeddings)
         {
-            Experiment exp = new Experiment();
-            exp.Name = "Experiment_test";
-
-            // Clustering on Umap (best case) 
-            UmapReduction umap = new UmapReduction();
-            Debug.Log("Experiment: Calculating UMAP Layout");
-            float[][] embeddings = umap.applyUMAP(data[1], 1.4f);
-
-            Debug.Log("Experiment: Creating cluster Tree on UMAP embeddings");
-            ClusterTree ct_umap = new ClusterTree(ConvertFloatArrayToDoubleArray(embeddings));
-            (List<double> distances, double total_dist) = TotalDistanceForClustering(ct_umap, embeddings);
-            exp.UMAPDistances = distances;
-            exp.TotalUMAPDistance = total_dist;
-            Debug.Log(total_dist.ToString());
-
-            // Clustering on Real Data
-            Debug.Log("Experiment: Creating cluster Tree on real data");
-            ClusterTree ct_real = new ClusterTree(ConvertFloatArrayToDoubleArray(data[1]));
-            (List<double> distances2, double total_dist2) = TotalDistanceForClustering(ct_real, embeddings);
-            exp.RealDistances = distances2;
-            exp.TotalRealDistance = total_dist2;
-            Debug.Log(total_dist2.ToString());
-
-            // Clustering on Random Data multiple times and average (should be worst case)
-            List<List<double>> random_distances = new List<List<double>>();
-            List<double> random_average_distance = new List<double>();
-            Debug.Log("Experiment: Creating cluster Tree on random data");
-            for (int index = 0; index < 10; index++)
+            Debug.Log("Beginning with UMAP Run " + run_number.ToString());
+            for (int layer_index = 0; layer_index < coordinates.Count; layer_index++)
             {
-                Debug.Log("Starting with random run " + index.ToString());
-                float[][] random_data = GenerateRandomArray(data[1].Length, data[1][0].Length);
-                ClusterTree ct_random = new ClusterTree(ConvertFloatArrayToDoubleArray(random_data));
-                (List<double> distances3, double total_dist3) = TotalDistanceForClustering(ct_random, embeddings);
-                random_distances.Add(distances3);
-                random_average_distance.Add(total_dist3);
-                Debug.Log(total_dist3.ToString());
+                Experiment exp = new Experiment();
+                exp.Run = run_number;
+                exp.Layer = layer_index;
+
+
+                // Clustering on UMAP Embeddings (best case) - Using Euclidean as it is the real dist
+                ClusterTree ct_umap = new ClusterTree(ConvertFloatArrayToDoubleArray(coordinates[layer_index]), ClusterTree.DistFunction.Euclidean);
+                (List<double> distances, double total_dist) = TotalDistanceForClustering(ct_umap, coordinates[layer_index]);
+                exp.UMAPDistances = distances;
+                exp.TotalUMAPDistance = total_dist;
+
+                // Clustering on Real Data
+                ClusterTree ct_real = new ClusterTree(ConvertFloatArrayToDoubleArray(subset_activations[layer_index + 1]));
+                (List<double> distances2, double total_dist2) = TotalDistanceForClustering(ct_real, coordinates[layer_index]);
+                exp.RealDistances = distances2;
+                exp.TotalRealDistance = total_dist2;
+
+                // Clustering on Random Data multiple times and average (should be worst case)
+                List<List<double>> random_distances = new List<List<double>>();
+                List<double> random_average_distance = new List<double>();
+                for (int index = 0; index < 100; index++)
+                {
+                    float[][] random_data = GenerateRandomArray(subset_activations[layer_index + 1].Length, subset_activations[layer_index + 1][0].Length);
+                    ClusterTree ct_random = new ClusterTree(ConvertFloatArrayToDoubleArray(random_data));
+                    (List<double> distances3, double total_dist3) = TotalDistanceForClustering(ct_random, coordinates[layer_index]);
+                    random_distances.Add(distances3);
+                    random_average_distance.Add(total_dist3);
+                    Debug.Log(total_dist3.ToString());
+                }
+
+                exp.RandomDistances = random_distances;
+                exp.TotalRandomDistance = random_average_distance;
+
+                umap_runs.Add(exp);
             }
-
-            exp.RandomDistances = random_distances;
-            exp.TotalRandomDistance = random_average_distance;
-
-            umap_runs.Add(exp);
+            run_number++;
         }
 
-        string filePath = "Assets/Experiments/cluster_distances_multiple_umap_runs.json";
+
+        string filePath = "Assets/Experiments/cluster_distances_final.json";
 
         string jsonData = JsonConvert.SerializeObject(umap_runs, Formatting.Indented);
 
@@ -282,7 +232,8 @@ public class LayoutAndCluster : MonoBehaviour
     // Class to save to the JSON File
     class Experiment
     {
-        public string Name { get; set; }
+        public int Run { get; set; }
+        public int Layer { get; set; }
         public List<double> UMAPDistances { get; set; }
         public double TotalUMAPDistance { get; set; }
         public List<double> RealDistances { get; set; }

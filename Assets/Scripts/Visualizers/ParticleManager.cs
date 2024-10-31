@@ -247,7 +247,7 @@ public class ParticleManager : MonoBehaviour
             particles[index].angularVelocity = 0;
             particles[index].angularVelocity3D = new Vector3(0, 0, 0);
             particles[index].velocity = new Vector3(0, 0, 0);
-            particles[index].startColor = Color.grey;
+            particles[index].startColor = new Color(226f, 226f, 226f, 255f);
 
 
             float x = coordinates[index][0];
